@@ -1,0 +1,56 @@
+import { Badge } from '../ui/badge';
+import { valueLabel } from '../../lib/utils';
+
+const tones: Record<string, 'green' | 'amber' | 'red' | 'blue' | 'slate'> = {
+  true: 'green',
+  false: 'slate',
+  ADMIN: 'blue',
+  RECEPTIONIST: 'green',
+  CASHIER: 'amber',
+  AVAILABLE: 'green',
+  OCCUPIED: 'red',
+  RESERVED: 'blue',
+  OUT_OF_SERVICE: 'amber',
+  PENDING: 'amber',
+  CONFIRMED: 'blue',
+  CANCELLED: 'red',
+  COMPLETED: 'green',
+  NO_SHOW: 'red',
+  ACTIVE: 'green',
+  CLOSED: 'slate',
+  OPEN: 'green',
+  OPEN_SALE: 'amber',
+  PAID: 'green',
+  CASH: 'green',
+  CARD: 'blue',
+  YAPE: 'blue',
+  PLIN: 'blue',
+  TRANSFER: 'slate',
+  PRODUCT: 'green',
+  ROOM_RENT: 'blue',
+  PENALTY: 'amber',
+  OTHER: 'slate',
+  PRODUCT_SALE: 'green',
+  STAFF_PAYMENT: 'blue',
+  STAFF_ADVANCE: 'amber',
+  PRODUCT_LOSS_CHARGE: 'red',
+  INVENTORY_PURCHASE: 'blue',
+  CASH_WITHDRAWAL: 'red',
+  CASH_ADJUSTMENT: 'amber',
+  RESERVATION_DEPOSIT: 'green',
+  INCOME: 'green',
+  EXPENSE: 'red',
+  PRESENT: 'green',
+  ABSENT: 'red',
+  LATE: 'amber',
+  JUSTIFIED: 'blue',
+  IN: 'green',
+  OUT: 'red',
+  ADJUSTMENT: 'blue',
+  LOSS: 'amber',
+};
+
+export function StatusBadge({ value }: { value: unknown }) {
+  const key = String(value);
+  return <Badge tone={tones[key] ?? 'slate'}>{valueLabel(value)}</Badge>;
+}
