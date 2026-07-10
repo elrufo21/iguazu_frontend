@@ -42,6 +42,7 @@ export type ResourceConfig = {
   columns: AppColumn[];
   readOnly?: boolean;
   toPayload?: (values: FormValues, editing?: AnyRow | null) => unknown;
+  toFormValues?: (row: AnyRow | null) => AnyRow | null;
   actions?: ResourceAction[];
   requiresCustomer?: boolean;
 };
@@ -183,7 +184,7 @@ export function CrudPage({ config }: { config: ResourceConfig }) {
         description={config.description}
         fields={config.fields}
         schema={config.schema}
-        initialValue={editing}
+        initialValue={config.toFormValues?.(editing) ?? editing}
         saving={save.isPending}
         onOpenChange={setOpen}
         onSubmit={(values) => save.mutate(values)}

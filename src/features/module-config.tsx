@@ -425,7 +425,11 @@ export const modules: Record<string, ResourceConfig> = {
         type: "number",
         helper: "Ej: si comprás cajas de 12, el factor es 12. Al ingresar 1 caja, el stock sube 12.",
       },
-      { name: "stock", label: "Stock inicial", type: "number" },
+      {
+        name: "stock",
+        label: "Stock inicial (paquetes/cajas)",
+        type: "number",
+      },
       { name: "minStock", label: "Stock mínimo", type: "number" },
     ],
     schema: form({
@@ -438,6 +442,14 @@ export const modules: Record<string, ResourceConfig> = {
       stock: optNum,
       minStock: optNum,
     }),
+    toFormValues: (row) => {
+      if (!row) return row;
+      const factor = Number(row.purchaseFactor ?? 1);
+      return {
+        ...row,
+        stock: factor > 1 ? Number(row.stock ?? 0) / factor : row.stock,
+      };
+    },
     columns: [
       { header: "Producto", accessor: "name" },
       { header: "Precio", accessor: "salePrice", render: money },

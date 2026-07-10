@@ -157,59 +157,6 @@ export function SalesPage() {
     setPendingSales(stayPendingSales);
   }, [stayId, selectedStay, sales, salesQuery.isLoading, lodgingRegistered]);
 
-  // Cuando cargan los productos de habitación, añadirlos al carrito automáticamente
-  useEffect(() => {
-    if (
-      !stayId ||
-      !selectedStay ||
-      roomProductsQuery.isLoading ||
-      !roomProductsQuery.data
-    )
-      return;
-    const stayNum = Number(selectedStay.id);
-    const roomNum = String(
-      getValue(selectedStay, "room.roomNumber") ?? stayNum,
-    );
-    const roomItems = normalizeRows(roomProductsQuery.data).filter(
-      (item) => Number(item.quantity ?? 0) > 0,
-    );
-
-    setCart((prev) => {
-      const lodging = lodgingRegistered
-        ? []
-        : [
-            prev.find((i) => i.itemType === "ROOM_RENT") ?? {
-              key: `room-${stayNum}`,
-              itemType: "ROOM_RENT" as const,
-              stayId: stayNum,
-              description: `Alojamiento Hab. ${roomNum}`,
-              quantity: 1,
-              unitPrice: Number(selectedStay.agreedPrice ?? 0),
-            },
-          ];
-      // Añadir productos del frigobar (todos, el recepcionista borra lo que no consumió)
-      const frigobarItems: CartItem[] = roomItems.map((item) => ({
-        key: `frigobar-${String(item.id)}`,
-        itemType: "PRODUCT" as const,
-        productId: Number((item.product as AnyRow)?.id ?? 0),
-        description: String(getValue(item, "product.name") ?? "Producto"),
-        quantity: Number(item.quantity ?? 1),
-        unitPrice: Number(getValue(item, "product.salePrice") ?? 0),
-      }));
-      // Conservar ítems manuales que el recepcionista haya agregado
-      const manualItems = prev.filter(
-        (i) => i.itemType !== "ROOM_RENT" && !i.key.startsWith("frigobar-"),
-      );
-      return [...lodging, ...frigobarItems, ...manualItems];
-    });
-  }, [
-    lodgingRegistered,
-    roomProductsQuery.data,
-    roomProductsQuery.isLoading,
-    stayId,
-    selectedStay,
-  ]);
-
   const roomProducts = normalizeRows(roomProductsQuery.data).filter(
     (item) => Number(item.quantity ?? 0) > 0,
   );
@@ -296,6 +243,33 @@ export function SalesPage() {
           description: String(product.name ?? "Producto"),
           quantity: 1,
           unitPrice: Number(product.salePrice ?? 0),
+        },
+      ];
+    });
+  };
+
+  const addRoomProduct = (item: AnyRow) => {
+    const product = item.product as AnyRow;
+    const key = `frigobar-${String(item.id)}`;
+    const max = Number(item.quantity ?? 1);
+    setCart((items) => {
+      const exists = items.find((row) => row.key === key);
+      if (exists) {
+        return items.map((row) =>
+          row.key === key
+            ? { ...row, quantity: Math.min(max, row.quantity + 1) }
+            : row,
+        );
+      }
+      return [
+        ...items,
+        {
+          key,
+          itemType: "PRODUCT",
+          productId: Number(product?.id ?? 0),
+          description: String(getValue(item, "product.name") ?? "Producto"),
+          quantity: 1,
+          unitPrice: Number(getValue(item, "product.salePrice") ?? 0),
         },
       ];
     });
@@ -409,9 +383,8 @@ export function SalesPage() {
                     Cuenta de Habitación
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Al seleccionar una habitación, el carrito se cargará
-                    automáticamente con el alquiler y los productos del
-                    frigobar.
+                    Al seleccionar una habitación, se cargará el alojamiento.
+                    Agrega consumos de la habitación solo si corresponde.
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-5">
@@ -469,7 +442,7 @@ export function SalesPage() {
 
                       <div>
                         <h4 className="text-sm font-medium mb-2 text-muted-foreground">
-                          Productos del Frigobar (auto-cargados)
+                          Productos asignados a la habitación
                         </h4>
                         <div className="grid gap-2">
                           {roomProductsQuery.isLoading ? (
@@ -482,15 +455,25 @@ export function SalesPage() {
                                 key={String(item.id)}
                                 className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-2.5"
                               >
-                                <span className="font-medium text-sm">
-                                  {String(
-                                    getValue(item, "product.name") ??
-                                      "Producto",
-                                  )}
-                                </span>
-                                <span className="text-sm text-muted-foreground">
-                                  x{String(item.quantity)} cargados al carrito
-                                </span>
+                                <div>
+                                  <p className="font-medium text-sm">
+                                    {String(
+                                      getValue(item, "product.name") ??
+                                        "Producto",
+                                    )}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Disponible: x{String(item.quantity)}
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => addRoomProduct(item)}
+                                >
+                                  <Plus className="mr-1 h-3 w-3" /> Agregar
+                                </Button>
                               </div>
                             ))
                           ) : (
