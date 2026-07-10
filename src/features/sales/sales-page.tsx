@@ -92,6 +92,18 @@ export function SalesPage() {
   const sales = normalizeRows(salesQuery.data);
   const selectedStay = stays.find((stay) => String(stay.id) === stayId);
   const selectedRoomId = Number(getValue(selectedStay ?? {}, "room.id") ?? 0);
+  const lodgingRegistered = useMemo(
+    () =>
+      sales.some(
+        (sale) =>
+          Number(sale.stayId) === Number(stayId) &&
+          sale.status !== "CANCELLED" &&
+          ((sale.details as AnyRow[] | undefined) ?? []).some(
+            (detail) => detail.itemType === "ROOM_RENT",
+          ),
+      ),
+    [sales, stayId],
+  );
   const roomProductsQuery = useQuery({
     queryKey: ["room-products", selectedRoomId],
     queryFn: () => resourceApi.list(`rooms/${selectedRoomId}/products`),
@@ -108,6 +120,7 @@ export function SalesPage() {
 
   // Auto-cargar carrito al seleccionar una estadía
   useEffect(() => {
+    if (salesQuery.isLoading) return;
     if (stayId === prevStayIdRef.current) return;
     prevStayIdRef.current = stayId;
 
@@ -118,21 +131,23 @@ export function SalesPage() {
       return;
     }
 
-    // 1. Agregar alojamiento automáticamente
+    // 1. Agregar alojamiento automáticamente solo si aún no existe.
     const stayNum = Number(selectedStay.id);
     const roomNum = String(
       getValue(selectedStay, "room.roomNumber") ?? stayNum,
     );
-    const newCart: CartItem[] = [
-      {
-        key: `room-${stayNum}`,
-        itemType: "ROOM_RENT",
-        stayId: stayNum,
-        description: `Alojamiento Hab. ${roomNum}`,
-        quantity: 1,
-        unitPrice: Number(selectedStay.agreedPrice ?? 0),
-      },
-    ];
+    const newCart: CartItem[] = lodgingRegistered
+      ? []
+      : [
+          {
+            key: `room-${stayNum}`,
+            itemType: "ROOM_RENT",
+            stayId: stayNum,
+            description: `Alojamiento Hab. ${roomNum}`,
+            quantity: 1,
+            unitPrice: Number(selectedStay.agreedPrice ?? 0),
+          },
+        ];
     setCart(newCart);
 
     // 2. Cargar cargos pendientes de BD
@@ -140,7 +155,7 @@ export function SalesPage() {
       (s) => Number(s.stayId) === stayNum && s.status === "OPEN",
     );
     setPendingSales(stayPendingSales);
-  }, [stayId, selectedStay, sales]);
+  }, [stayId, selectedStay, sales, salesQuery.isLoading, lodgingRegistered]);
 
   // Cuando cargan los productos de habitación, añadirlos al carrito automáticamente
   useEffect(() => {
@@ -160,17 +175,18 @@ export function SalesPage() {
     );
 
     setCart((prev) => {
-      // Mantener el alojamiento si ya está
-      const lodging: CartItem = prev.find(
-        (i) => i.itemType === "ROOM_RENT",
-      ) ?? {
-        key: `room-${stayNum}`,
-        itemType: "ROOM_RENT",
-        stayId: stayNum,
-        description: `Alojamiento Hab. ${roomNum}`,
-        quantity: 1,
-        unitPrice: Number(selectedStay.agreedPrice ?? 0),
-      };
+      const lodging = lodgingRegistered
+        ? []
+        : [
+            prev.find((i) => i.itemType === "ROOM_RENT") ?? {
+              key: `room-${stayNum}`,
+              itemType: "ROOM_RENT" as const,
+              stayId: stayNum,
+              description: `Alojamiento Hab. ${roomNum}`,
+              quantity: 1,
+              unitPrice: Number(selectedStay.agreedPrice ?? 0),
+            },
+          ];
       // Añadir productos del frigobar (todos, el recepcionista borra lo que no consumió)
       const frigobarItems: CartItem[] = roomItems.map((item) => ({
         key: `frigobar-${String(item.id)}`,
@@ -184,9 +200,10 @@ export function SalesPage() {
       const manualItems = prev.filter(
         (i) => i.itemType !== "ROOM_RENT" && !i.key.startsWith("frigobar-"),
       );
-      return [lodging, ...frigobarItems, ...manualItems];
+      return [...lodging, ...frigobarItems, ...manualItems];
     });
   }, [
+    lodgingRegistered,
     roomProductsQuery.data,
     roomProductsQuery.isLoading,
     stayId,
