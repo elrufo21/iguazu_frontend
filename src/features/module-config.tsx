@@ -57,6 +57,16 @@ const itemTypeOptions = [
   { label: "Penalidad", value: "PENALTY" },
   { label: "Otro", value: "OTHER" },
 ];
+const unitOptions = [
+  { label: "Unidad", value: "UNIDAD" },
+  { label: "Pack", value: "PACK" },
+  { label: "Caja", value: "CAJA" },
+  { label: "Bolsa", value: "BOLSA" },
+  { label: "Botella", value: "BOTELLA" },
+  { label: "Kilo", value: "KILO" },
+  { label: "Litro", value: "LITRO" },
+  { label: "Servicio", value: "SERVICIO" },
+];
 
 const today = new Date();
 const from = new Date(today.getFullYear(), today.getMonth(), 1)
@@ -403,6 +413,18 @@ export const modules: Record<string, ResourceConfig> = {
         type: "number",
         step: "0.01",
       },
+      {
+        name: "unit",
+        label: "Unidad de venta",
+        type: "select",
+        options: unitOptions,
+      },
+      {
+        name: "purchaseFactor",
+        label: "Factor de compra (unidades por paquete)",
+        type: "number",
+        helper: "Ej: si comprás cajas de 12, el factor es 12. Al ingresar 1 caja, el stock sube 12.",
+      },
       { name: "stock", label: "Stock inicial", type: "number" },
       { name: "minStock", label: "Stock mínimo", type: "number" },
     ],
@@ -411,12 +433,15 @@ export const modules: Record<string, ResourceConfig> = {
       description: opt,
       purchasePrice: num,
       salePrice: num,
+      unit: opt,
+      purchaseFactor: optNum,
       stock: optNum,
       minStock: optNum,
     }),
     columns: [
       { header: "Producto", accessor: "name" },
       { header: "Precio", accessor: "salePrice", render: money },
+      { header: "Unidad", accessor: "unit" },
       { header: "Stock", accessor: "stock" },
       { header: "Mínimo", accessor: "minStock" },
       {
@@ -456,7 +481,7 @@ export const modules: Record<string, ResourceConfig> = {
         name: "quantity",
         label: "Cantidad",
         type: "number",
-        helper: "En corrección puedes usar negativo para restar stock.",
+        helper: "Ingreso: cantidad de paquetes/cajas (se multiplica por el factor del producto). Corrección: puede ser negativo.",
       },
       {
         name: "reason",
