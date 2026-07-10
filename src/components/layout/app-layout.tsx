@@ -55,6 +55,17 @@ export function AppLayout() {
     setOpenGroup(currentGroup);
   }, [currentGroup]);
 
+  // Bloquear el scroll del body cuando el sidebar móvil está abierto.
+  useEffect(() => {
+    if (mobileOpen) {
+      const original = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = original;
+      };
+    }
+  }, [mobileOpen]);
+
   const doLogout = () => {
     logout();
     navigate("/login", { replace: true });
@@ -181,10 +192,10 @@ export function AppLayout() {
           onClick={() => setMobileOpen(false)}
         >
           <div
-            className="h-full w-80 max-w-[85vw] bg-[#10231f] p-3 text-white"
+            className="flex h-full w-80 max-w-[85vw] flex-col bg-[#10231f] p-3 text-white"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="mb-3 flex h-12 items-center justify-between">
+            <div className="flex h-12 shrink-0 items-center justify-between">
               <span className="font-semibold">Iguazú</span>
               <Button
                 variant="ghost"
@@ -195,7 +206,7 @@ export function AppLayout() {
                 <ChevronLeft className="h-5 w-5" />
               </Button>
             </div>
-            <nav className="space-y-3 overflow-y-auto pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <nav className="flex-1 space-y-3 overflow-y-auto overscroll-contain pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {visibleGroups.map((group) => (
                 <div key={group.label}>
                   <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/45">

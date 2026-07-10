@@ -13,6 +13,7 @@ import { EmployeesPage } from '../features/employees/employees-page';
 import { InventoryPage } from '../features/inventory/inventory-page';
 import { PriceTypesPage } from '../features/price-types/price-types-page';
 import { PermissionsPage } from '../features/permissions/permissions-page';
+import { PenaltiesPage } from '../features/penalties/penalties-page';
 import { ProductsPage } from '../features/products/products-page';
 import { ReservationsPage } from '../features/reservations/reservations-page';
 import { ReportsPage } from '../features/reports/reports-page';
@@ -60,6 +61,7 @@ export const router = createBrowserRouter([
       { path: 'staff-advances', element: <StaffAdvancesPage /> },
       { path: 'staff-payments', element: <StaffPaymentsPage /> },
       { path: 'staff-discounts', element: <StaffDiscountsPage /> },
+      { path: 'penalties', element: <PenaltiesPage /> },
       { path: 'cash-closures', element: <CashClosuresPage /> },
       { path: 'permissions', element: <PermissionsPage /> },
     ],
