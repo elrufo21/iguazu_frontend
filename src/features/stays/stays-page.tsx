@@ -128,11 +128,14 @@ export function StaysPage() {
   const lodgingAmount = Number(
     getValue(accountQuery.data ?? {}, "lodging.amount") ?? 0,
   );
+  const lodgingPending = Number(
+    getValue(accountQuery.data ?? {}, "lodging.pendingAmount") ?? lodgingAmount,
+  );
   const pendingCharges = Number(
     getValue(accountQuery.data ?? {}, "totals.pendingCharges") ?? 0,
   );
   // Saldo que el backend exigirá cubrir antes de liberar la habitación.
-  const lodgingDue = Math.max(0, lodgingAmount + pendingCharges);
+  const lodgingDue = Math.max(0, lodgingPending + pendingCharges);
   const availableRooms = rooms.filter(
     (room) => room.status === "AVAILABLE",
   ).length;
@@ -261,6 +264,19 @@ export function StaysPage() {
 
       <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
         {stays.map((stay) => {
+          const staySales = salesQuery.data ? normalizeRows(salesQuery.data).filter(
+            (sale) =>
+              Number(sale.stayId) === Number(stay.id) &&
+              sale.status !== "CANCELLED",
+          ) : [];
+          const lodgingRegistered = staySales.some((sale) =>
+            ((sale.details as AnyRow[] | undefined) ?? []).some(
+              (detail) => detail.itemType === "ROOM_RENT",
+            ),
+          );
+          const lodgingPendingForStay = lodgingRegistered
+            ? 0
+            : Number(stay.agreedPrice ?? 0);
           const pendingTotal = openCharges
             .filter((sale) => Number(sale.stayId) === Number(stay.id))
             .reduce((sum, sale) => sum + Number(sale.total ?? 0), 0);
@@ -304,10 +320,10 @@ export function StaysPage() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">
-                    Precio pactado
+                    Alojamiento pendiente
                   </span>
                   <span className="text-xl font-semibold">
-                    {money(stay.agreedPrice)}
+                    {money(lodgingPendingForStay)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg bg-muted p-3">
@@ -323,7 +339,7 @@ export function StaysPage() {
                     Total estimado
                   </span>
                   <span className="text-xl font-semibold">
-                    {money(Number(stay.agreedPrice ?? 0) + pendingTotal)}
+                    {money(lodgingPendingForStay + pendingTotal)}
                   </span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -411,7 +427,7 @@ export function StaysPage() {
             <div className="rounded-md border border-border bg-muted p-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Alojamiento</span>
-                <span className="font-medium">{money(lodgingAmount)}</span>
+                <span className="font-medium">{money(lodgingPending)}</span>
               </div>
               {pendingCharges > 0 && (
                 <div className="mt-1 flex justify-between">
