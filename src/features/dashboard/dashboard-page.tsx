@@ -73,7 +73,13 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <Metric title="Caja" value={openShift.data?.id ? 'Abierta' : 'Cerrada'} icon={<WalletCards />} badge={<StatusBadge value={openShift.data?.id ? 'OPEN' : 'CLOSED'} />} />
+        <Metric
+          title="Caja"
+          value={openShift.data?.id ? 'Abierta' : 'Cerrada'}
+          icon={<WalletCards />}
+          badge={<StatusBadge value={openShift.data?.id ? 'OPEN' : 'CLOSED'} />}
+          to="/cash-closures"
+        />
         <Metric title="Disponibles" value={available} icon={<DoorOpen />} />
         <Metric title="Ocupadas" value={occupied} icon={<BedDouble />} />
         <Metric title="Reservas pendientes" value={pending} icon={<CalendarClock />} />
@@ -134,8 +140,8 @@ export function DashboardPage() {
   );
 }
 
-function Metric({ title, value, icon, badge }: { title: string; value: string | number; icon: ReactNode; badge?: ReactNode }) {
-  return (
+function Metric({ title, value, icon, badge, to }: { title: string; value: string | number; icon: ReactNode; badge?: ReactNode; to?: string }) {
+  const content = (
     <Card>
       <CardContent className="p-4">
         <div className="flex items-center justify-between gap-3">
@@ -147,6 +153,8 @@ function Metric({ title, value, icon, badge }: { title: string; value: string | 
       </CardContent>
     </Card>
   );
+  if (!to) return content;
+  return <Link to={to}>{content}</Link>;
 }
 
 function QuickLink({ to, icon, label }: { to: string; icon: ReactNode; label: string }) {

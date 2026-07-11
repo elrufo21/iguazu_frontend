@@ -57,6 +57,11 @@ const itemTypeOptions = [
   { label: "Penalidad", value: "PENALTY" },
   { label: "Otro", value: "OTHER" },
 ];
+const cashExpenseCategoryOptions = [
+  { label: "Retiro de caja", value: "CASH_WITHDRAWAL" },
+  { label: "Ajuste de caja", value: "CASH_ADJUSTMENT" },
+  { label: "Compra inventario", value: "INVENTORY_PURCHASE" },
+];
 const unitOptions = [
   { label: "Unidad", value: "UNIDAD" },
   { label: "Pack", value: "PACK" },
@@ -466,7 +471,7 @@ export const modules: Record<string, ResourceConfig> = {
   inventory: {
     key: "inventory",
     title: "Stock",
-    description: "Aumenta, corrige o descuenta unidades de productos.",
+    description: "Aumenta, corrige o descuenta unidades. Las salidas quedan pendientes para revisión del admin.",
     listPath: "inventory/movements",
     createPath: (values) => `inventory/${values.movementType}`,
     createLabel: "Actualizar stock",
@@ -499,6 +504,7 @@ export const modules: Record<string, ResourceConfig> = {
         name: "reason",
         label: "Motivo",
         placeholder: "Ej: compra, conteo físico, producto dañado",
+        helper: "Si el usuario tiene empleado asociado y baja stock, queda pendiente para revisión del admin.",
       },
     ],
     schema: form({
@@ -806,9 +812,30 @@ export const modules: Record<string, ResourceConfig> = {
     title: "Movimientos de caja",
     description: "Ingresos y egresos registrados.",
     listPath: "cash-movements",
-    fields: [],
-    schema: form({}),
-    readOnly: true,
+    createPath: "cash-movements/expense",
+    createLabel: "Registrar salida",
+    fields: [
+      {
+        name: "category",
+        label: "Tipo de salida",
+        type: "select",
+        options: cashExpenseCategoryOptions,
+      },
+      { name: "amount", label: "Monto", type: "number", step: "0.01" },
+      {
+        name: "paymentMethod",
+        label: "Método",
+        type: "select",
+        options: paymentOptions,
+      },
+      { name: "description", label: "Motivo", type: "textarea" },
+    ],
+    schema: form({
+      category: req,
+      amount: num,
+      paymentMethod: req,
+      description: req,
+    }),
     columns: [
       {
         header: "Tipo",
@@ -1021,6 +1048,15 @@ export const modules: Record<string, ResourceConfig> = {
       { name: "amount", label: "Monto", type: "number", step: "0.01" },
       { name: "reason", label: "Motivo" },
       {
+        name: "productId",
+        label: "Producto tomado",
+        type: "relation",
+        endpoint: "products",
+        labelKey: "name",
+        optional: true,
+      },
+      { name: "quantity", label: "Cantidad tomada", type: "number" },
+      {
         name: "inventoryMovementId",
         label: "Movimiento inventario",
         type: "number",
@@ -1037,6 +1073,8 @@ export const modules: Record<string, ResourceConfig> = {
       employeeId: num,
       amount: num,
       reason: req,
+      productId: optNum,
+      quantity: optNum,
       inventoryMovementId: optNum,
       chargeNow: bool,
       paymentMethod: opt,

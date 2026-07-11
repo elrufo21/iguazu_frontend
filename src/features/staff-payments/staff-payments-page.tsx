@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { DataTable, type AppColumn } from '../../components/data-table/data-table';
 import { Badge } from '../../components/ui/badge';
@@ -53,7 +53,7 @@ export function StaffPaymentsPage() {
     { header: 'Empleado', accessor: 'employee.fullName' },
     { header: 'Bruto', accessor: 'grossAmount', render: (v) => money(Number(v ?? 0)) },
     {
-      header: 'Penaliz.',
+      header: 'Descuentos',
       accessor: 'penaltyAmount',
       render: (v) => {
         const n = Number(v ?? 0);
@@ -72,7 +72,7 @@ export function StaffPaymentsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">Pagos de personal</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pagos con cálculo de bruto, penalidades y neto por periodo.
+            Pagos con cálculo de bruto, descuentos y neto por periodo.
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>
@@ -116,11 +116,13 @@ function NewPaymentDialog({
   employees: AnyRow[];
   onCreated: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [periodStart, setPeriodStart] = useState(todayStr());
   const [periodEnd, setPeriodEnd] = useState(todayStr());
   const [amount, setAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [selectedPenaltyIds, setSelectedPenaltyIds] = useState<number[]>([]);
 
   const employee = employees.find((e) => Number(e.id) === employeeId) ?? null;
 
@@ -138,9 +140,16 @@ function NewPaymentDialog({
     [penaltiesQuery.data],
   );
 
+  useEffect(() => {
+    setSelectedPenaltyIds(pendingPenalties.map((p) => Number(p.id)));
+  }, [pendingPenalties]);
+
   // Cálculos en vivo.
   const dailyRate = Number(employee?.dailyRate ?? 0);
-  const penaltiesTotal = pendingPenalties.reduce(
+  const selectedPenalties = pendingPenalties.filter((p) =>
+    selectedPenaltyIds.includes(Number(p.id)),
+  );
+  const penaltiesTotal = selectedPenalties.reduce(
     (sum, p) => sum + Number(p.amount ?? 0),
     0,
   );
@@ -164,6 +173,7 @@ function NewPaymentDialog({
         periodEnd,
         amount: manualGross || undefined,
         paymentMethod,
+        penaltyIds: selectedPenaltyIds,
       }),
     onSuccess: () => {
       toast.success(`Pago registrado. Neto: ${money(net)}`);
@@ -173,11 +183,22 @@ function NewPaymentDialog({
     onError: (error) => toast.error(errorMessage(error)),
   });
 
+  const voidPenalty = useMutation({
+    mutationFn: (id: number) => resourceApi.post(`penalties/${id}/void`),
+    onSuccess: (_data, id) => {
+      setSelectedPenaltyIds((ids) => ids.filter((item) => item !== id));
+      void queryClient.invalidateQueries({ queryKey: ['penalties', 'employee', employeeId] });
+      toast.success('Descuento descartado.');
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
   const canSubmit =
     Boolean(employeeId) &&
     Boolean(periodStart) &&
     Boolean(periodEnd) &&
     periodStart <= periodEnd &&
+    net > 0 &&
     !create.isPending;
 
   return (
@@ -191,7 +212,7 @@ function NewPaymentDialog({
       <DialogContent className="md:w-[min(560px,calc(100vw-2rem))] p-5">
         <DialogTitle className="text-lg font-semibold">Nuevo pago de personal</DialogTitle>
         <DialogDescription className="mt-1 text-sm text-muted-foreground">
-          Seleccioná el empleado y el período. Se mostrarán sus penalidades pendientes.
+          Seleccioná el empleado y elegí qué descuentos aplicar en este pago.
         </DialogDescription>
 
         <div className="mt-4 grid gap-3">
@@ -261,24 +282,54 @@ function NewPaymentDialog({
         {employee && (
           <div className="mt-4 space-y-3 rounded-lg border border-border bg-muted/40 p-4">
             <p className="text-sm font-semibold">
-              Penalidades pendientes de {String(employee.fullName)}
+              Descuentos pendientes de {String(employee.fullName)}
             </p>
 
             {pendingPenalties.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Sin penalidades pendientes.</p>
+              <p className="text-sm text-muted-foreground">Sin descuentos pendientes.</p>
             ) : (
               <div className="space-y-1">
                 {pendingPenalties.map((p) => (
                   <div
                     key={p.id}
-                    className="flex items-center justify-between rounded-md bg-amber-50 px-3 py-1.5 text-sm"
+                    className="flex items-center justify-between gap-3 rounded-md bg-amber-50 px-3 py-1.5 text-sm"
                   >
-                    <span className="truncate text-amber-900">{String(p.reason)}</span>
-                    <span className="font-semibold text-amber-700">{money(Number(p.amount))}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        checked={selectedPenaltyIds.includes(Number(p.id))}
+                        onChange={(e) =>
+                          setSelectedPenaltyIds((ids) =>
+                            e.target.checked
+                              ? [...ids, Number(p.id)]
+                              : ids.filter((id) => id !== Number(p.id)),
+                          )
+                        }
+                      />
+                      <span className="truncate text-amber-900">{String(p.reason)}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="font-semibold text-amber-700">{money(Number(p.amount))}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-muted-foreground"
+                        disabled={voidPenalty.isPending}
+                        onClick={() => {
+                          if (window.confirm('¿Descartar este descuento pendiente?')) {
+                            voidPenalty.mutate(Number(p.id));
+                          }
+                        }}
+                      >
+                        Descartar
+                      </Button>
+                    </span>
                   </div>
                 ))}
                 <div className="flex justify-between pt-1 text-sm">
-                  <span className="text-muted-foreground">Subtotal penalidades</span>
+                  <span className="text-muted-foreground">Subtotal seleccionado</span>
                   <span className="font-semibold">{money(penaltiesTotal)}</span>
                 </div>
               </div>
@@ -291,7 +342,7 @@ function NewPaymentDialog({
                 <span className="font-semibold">{money(gross)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total penalidades</span>
+                <span className="text-muted-foreground">Total descuentos</span>
                 <span className="font-semibold text-red-600">- {money(penaltiesTotal)}</span>
               </div>
               <div className="flex justify-between border-t border-border pt-1 text-base">
