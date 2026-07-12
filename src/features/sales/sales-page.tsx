@@ -13,6 +13,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
+import { CashShiftSelect } from "../../components/cash-shift-select";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -52,6 +53,7 @@ export function SalesPage() {
   const [search, setSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [stayId, setStayId] = useState(searchParams.get("stayId") || "");
+  const [cashShiftId, setCashShiftId] = useState("");
 
   // New states for invoice
   const [invoiceType, setInvoiceType] = useState("TICKET");
@@ -182,6 +184,7 @@ export function SalesPage() {
       // 1. Primero, cobrar los cargos pendientes existentes en BD
       for (const pendingSale of pendingSales) {
         await resourceApi.post(`sales/${pendingSale.id}/pay`, {
+          ...(cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
           payments: [{ paymentMethod, amount: Number(pendingSale.total ?? 0) }],
         });
       }
@@ -190,6 +193,7 @@ export function SalesPage() {
       if (cart.length === 0) return null;
       const amount = Number(total.toFixed(2));
       return resourceApi.create("sales", {
+        ...(cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
         ...(customerId ? { customerId: Number(customerId) } : {}),
         ...(stayId ? { stayId: Number(stayId) } : {}),
         invoiceType,
@@ -219,6 +223,7 @@ export function SalesPage() {
       setStayId("");
       prevStayIdRef.current = "";
       setInvoiceNumber("");
+      setCashShiftId("");
       void queryClient.invalidateQueries();
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -601,6 +606,8 @@ export function SalesPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-5 pt-5">
+                <CashShiftSelect value={cashShiftId} onChange={setCashShiftId} />
+
                 {/* Cargos pendientes de BD */}
                 {pendingSales.length > 0 && (
                   <div className="rounded-lg border border-amber-300 bg-amber-50/70 p-3 dark:bg-amber-950/20 dark:border-amber-900/50">

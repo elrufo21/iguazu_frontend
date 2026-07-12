@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BedDouble,
+  Ban,
   Box,
   ChevronDown,
   ChevronUp,
@@ -17,6 +18,7 @@ import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { StatusBadge } from '../../components/status-badge/status-badge';
+import { CashShiftSelect } from '../../components/cash-shift-select';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import {
@@ -28,9 +30,11 @@ import {
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select } from '../../components/ui/select';
+import { Textarea } from '../../components/ui/textarea';
 import { resourceApi } from '../../lib/api';
 import { errorMessage } from '../../lib/api-error';
 import { dateTime, getValue, money } from '../../lib/utils';
+import { useAuthStore } from '../../store/auth.store';
 import type { AnyRow } from '../../types';
 import { normalizeRows } from '../shared/resource-save';
 
@@ -63,7 +67,23 @@ const SUNAT_TYPE_LABELS: Record<string, string> = {
   '08': 'Nota de Débito',
 };
 
-function SaleCard({ sale, onPay, onInvoice, isPaying, isInvoicing }: { sale: AnyRow; onPay: (sale: AnyRow) => void; onInvoice: (sale: AnyRow) => void; isPaying: boolean; isInvoicing: boolean }) {
+function SaleCard({
+  sale,
+  onPay,
+  onInvoice,
+  onCancel,
+  isPaying,
+  isInvoicing,
+  isCancelling,
+}: {
+  sale: AnyRow;
+  onPay: (sale: AnyRow) => void;
+  onInvoice: (sale: AnyRow) => void;
+  onCancel: (sale: AnyRow) => void;
+  isPaying: boolean;
+  isInvoicing: boolean;
+  isCancelling: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   const details = (sale.details as AnyRow[] | undefined) ?? [];
   const payments = (sale.payments as AnyRow[] | undefined) ?? [];
@@ -85,6 +105,7 @@ function SaleCard({ sale, onPay, onInvoice, isPaying, isInvoicing }: { sale: Any
   const invoiceRejected = invoiceStatus === 'REJECTED';
   // Puede emitir si está pagada, con cliente, y (sin comprobante o con comprobante rechazado).
   const canInvoice = status === 'PAID' && Boolean(sale.customer) && (!invoice || invoiceRejected);
+  const canCancel = status !== 'CANCELLED' && !invoiceAccepted;
 
   return (
     <div className={`rounded-xl border bg-card shadow-sm transition-all overflow-hidden ${
@@ -204,6 +225,12 @@ function SaleCard({ sale, onPay, onInvoice, isPaying, isInvoicing }: { sale: Any
                 Cobrar {money(sale.total)}
               </Button>
             )}
+            {canCancel && (
+              <Button size="sm" variant="outline" disabled={isCancelling} onClick={() => onCancel(sale)} className="gap-1.5">
+                <Ban className="h-4 w-4" />
+                Anular
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -268,7 +295,11 @@ export function SalesHistoryPage() {
   const [invoiceFilter, setInvoiceFilter] = useState('');
   const [invoiceSale, setInvoiceSale] = useState<AnyRow | null>(null);
   const [invoiceType, setInvoiceType] = useState<'auto' | '01' | '03'>('auto');
+  const [cancelSale, setCancelSale] = useState<AnyRow | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelCashShiftId, setCancelCashShiftId] = useState('');
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
 
   const salesQuery = useQuery({
     queryKey: ['sales'],
@@ -301,6 +332,24 @@ export function SalesHistoryPage() {
       }
       setInvoiceSale(null);
       void queryClient.invalidateQueries();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const cancel = useMutation({
+    mutationFn: ({ id, reason, cashShiftId }: { id: number; reason: string; cashShiftId?: number }) =>
+      resourceApi.post(`sales/${id}/cancel`, {
+        reason,
+        ...(cashShiftId ? { cashShiftId } : {}),
+      }),
+    onSuccess: () => {
+      toast.success('Venta anulada');
+      setCancelSale(null);
+      setCancelReason('');
+      setCancelCashShiftId('');
+      void queryClient.invalidateQueries({ queryKey: ['sales'] });
+      void queryClient.invalidateQueries({ queryKey: ['cash-movements'] });
+      void queryClient.invalidateQueries({ queryKey: ['inventory'] });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
@@ -409,8 +458,14 @@ export function SalesHistoryPage() {
                 setInvoiceSale(s);
                 setInvoiceType('auto');
               }}
+              onCancel={(s) => {
+                setCancelSale(s);
+                setCancelReason('');
+                setCancelCashShiftId('');
+              }}
               isPaying={paySale.isPending}
               isInvoicing={issueInvoice.isPending && issueInvoice.variables?.id === sale.id}
+              isCancelling={cancel.isPending && cancel.variables?.id === sale.id}
             />
           ))}
         </div>
@@ -434,7 +489,96 @@ export function SalesHistoryPage() {
         }}
         pending={issueInvoice.isPending}
       />
+
+      <CancelSaleDialog
+        sale={cancelSale}
+        reason={cancelReason}
+        cashShiftId={cancelCashShiftId}
+        showCashShift={user?.role === 'ADMIN' && String(cancelSale?.status ?? '') === 'PAID'}
+        onReasonChange={setCancelReason}
+        onCashShiftChange={setCancelCashShiftId}
+        onOpenChange={(open) => {
+          if (!open) setCancelSale(null);
+        }}
+        onConfirm={() => {
+          if (!cancelSale) return;
+          const reason = cancelReason.trim();
+          if (!reason) {
+            toast.error('Ingresa el motivo de anulación.');
+            return;
+          }
+          if (user?.role === 'ADMIN' && String(cancelSale.status ?? '') === 'PAID' && !cancelCashShiftId) {
+            toast.error('Selecciona la caja abierta para registrar la salida.');
+            return;
+          }
+          cancel.mutate({
+            id: Number(cancelSale.id),
+            reason,
+            cashShiftId: cancelCashShiftId ? Number(cancelCashShiftId) : undefined,
+          });
+        }}
+        pending={cancel.isPending}
+      />
     </section>
+  );
+}
+
+function CancelSaleDialog({
+  sale,
+  reason,
+  cashShiftId,
+  showCashShift,
+  onReasonChange,
+  onCashShiftChange,
+  onOpenChange,
+  onConfirm,
+  pending,
+}: {
+  sale: AnyRow | null;
+  reason: string;
+  cashShiftId: string;
+  showCashShift: boolean;
+  onReasonChange: (value: string) => void;
+  onCashShiftChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+  pending: boolean;
+}) {
+  if (!sale) return null;
+
+  return (
+    <Dialog open={sale !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[min(480px,calc(100vw-2rem))] p-5">
+        <DialogTitle className="text-lg font-semibold">Anular venta #{String(sale.id)}</DialogTitle>
+        <DialogDescription className="mt-2 text-sm text-muted-foreground">
+          Se devolverá el stock de productos y, si ya fue cobrada, se registrará una salida de caja por {money(sale.total)}.
+        </DialogDescription>
+
+        <div className="mt-4 space-y-2">
+          <Label>Motivo</Label>
+          <Textarea
+            value={reason}
+            onChange={(event) => onReasonChange(event.target.value)}
+            placeholder="Ej. Error en venta, producto devuelto..."
+          />
+        </div>
+
+        {showCashShift && (
+          <div className="mt-4">
+            <CashShiftSelect value={cashShiftId} onChange={onCashShiftChange} />
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+            Cancelar
+          </Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={pending}>
+            {pending ? 'Anulando...' : 'Anular venta'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

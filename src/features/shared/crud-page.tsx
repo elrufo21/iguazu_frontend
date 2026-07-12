@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Edit, MoreHorizontal, Plus, Power, Trash2 } from 'lucide-react';
+import { Edit, FileSpreadsheet, FileText, MoreHorizontal, Plus, Power, Trash2 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import type { z } from 'zod';
@@ -16,6 +16,7 @@ import {
 } from '../../components/ui/dropdown-menu';
 import { resourceApi } from '../../lib/api';
 import { errorMessage } from '../../lib/api-error';
+import { dateTime, getValue, money, valueLabel } from '../../lib/utils';
 import type { AnyRow } from '../../types';
 import { normalizeRows, saveResource } from './resource-save';
 
@@ -45,6 +46,15 @@ export type ResourceConfig = {
   toFormValues?: (row: AnyRow | null) => AnyRow | null;
   actions?: ResourceAction[];
   requiresCustomer?: boolean;
+  exportRows?: {
+    fileName: string;
+    columns: {
+      header: string;
+      accessor?: string;
+      type?: 'money' | 'date' | 'status';
+      value?: (row: AnyRow) => unknown;
+    }[];
+  };
 };
 
 export function CrudPage({ config }: { config: ResourceConfig }) {
@@ -59,6 +69,23 @@ export function CrudPage({ config }: { config: ResourceConfig }) {
   });
 
   const rows = useMemo(() => normalizeRows(list.data), [list.data]);
+  const exportData = useMemo(
+    () =>
+      config.exportRows
+        ? rows.map((row) =>
+            Object.fromEntries(
+              config.exportRows!.columns.map((column) => [
+                column.header,
+                exportValue(
+                  column.value ? column.value(row) : getValue(row, column.accessor ?? ''),
+                  column.type,
+                ),
+              ]),
+            ),
+          )
+        : [],
+    [config.exportRows, rows],
+  );
 
   const save = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -158,12 +185,26 @@ export function CrudPage({ config }: { config: ResourceConfig }) {
           <h1 className="text-2xl font-semibold tracking-normal">{config.title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{config.description}</p>
         </div>
-        {!config.readOnly && config.createPath && (
-          <Button onClick={startCreate}>
-            <Plus className="h-4 w-4" />
-            {config.createLabel ?? 'Crear'}
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {config.exportRows && (
+            <>
+              <Button variant="outline" disabled={rows.length === 0} onClick={() => void downloadRowsPdf(config.title, exportData, config.exportRows!.fileName)}>
+                <FileText className="h-4 w-4" />
+                PDF
+              </Button>
+              <Button variant="outline" disabled={rows.length === 0} onClick={() => void downloadRowsExcel(config.title, exportData, config.exportRows!.fileName)}>
+                <FileSpreadsheet className="h-4 w-4" />
+                Excel
+              </Button>
+            </>
+          )}
+          {!config.readOnly && config.createPath && (
+            <Button onClick={startCreate}>
+              <Plus className="h-4 w-4" />
+              {config.createLabel ?? 'Crear'}
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -202,4 +243,48 @@ export function CrudPage({ config }: { config: ResourceConfig }) {
       />
     </section>
   );
+}
+
+function exportValue(value: unknown, type?: 'money' | 'date' | 'status') {
+  if (type === 'money') return money(value);
+  if (type === 'date') return dateTime(value);
+  if (type === 'status') return valueLabel(value);
+  return String(value ?? '');
+}
+
+async function downloadRowsExcel(title: string, rows: Record<string, string>[], fileName: string) {
+  const { default: writeXlsxFile } = await import('write-excel-file/browser');
+  const data = rows.length ? rows : [{ Mensaje: 'Sin datos' }];
+  const headers = Object.keys(data[0] ?? {});
+  const file = await writeXlsxFile([
+    {
+      sheet: title.slice(0, 31),
+      data: [
+        headers.map((value) => ({ value, fontWeight: 'bold' as const })),
+        ...data.map((row) => headers.map((header) => ({ value: row[header] ?? '' }))),
+      ],
+    },
+  ] as any);
+  await file.toFile(`${fileName}.xlsx`);
+}
+
+async function downloadRowsPdf(title: string, rows: Record<string, string>[], fileName: string) {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
+  const data = rows.length ? rows : [{ Mensaje: 'Sin datos' }];
+  const headers = Object.keys(data[0] ?? {});
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  doc.setFontSize(16);
+  doc.text(title, 40, 42);
+  autoTable(doc, {
+    startY: 62,
+    head: [headers],
+    body: data.map((row) => headers.map((header) => row[header] ?? '')),
+    styles: { fontSize: 8, cellPadding: 4 },
+    headStyles: { fillColor: [16, 35, 31] },
+    margin: { left: 40, right: 40 },
+  });
+  doc.save(`${fileName}.pdf`);
 }

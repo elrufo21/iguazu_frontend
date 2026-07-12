@@ -402,8 +402,11 @@ function ProductSalesReport({ data }: { data: AnyRow }) {
 
   const columns: AppColumn[] = [
     { header: 'Producto', accessor: 'product' },
+    { header: 'Unidad', accessor: 'unit' },
     { header: 'Cantidad', accessor: 'quantity' },
     { header: 'Total', accessor: 'total', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Costo', accessor: 'costTotal', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Ganancia', accessor: 'profitTotal', render: (v) => money(Number(v ?? 0)) },
     { header: 'Stock', accessor: 'stock' },
     {
       header: 'Estado',

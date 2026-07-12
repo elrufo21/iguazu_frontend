@@ -13,6 +13,7 @@ import {
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ResourceFormDialog } from "../../components/forms/resource-form-dialog";
+import { CashShiftSelect } from "../../components/cash-shift-select";
 import { StatusBadge } from "../../components/status-badge/status-badge";
 import { ConfirmDialog } from "../../components/ui/alert-dialog";
 import { Button } from "../../components/ui/button";
@@ -47,6 +48,7 @@ export function StaysPage() {
   const [open, setOpen] = useState(false);
   const [checkoutId, setCheckoutId] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<string>("CASH");
+  const [cashShiftId, setCashShiftId] = useState("");
   const [chargeStay, setChargeStay] = useState<AnyRow | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [productSource, setProductSource] = useState<
@@ -152,12 +154,13 @@ export function StaysPage() {
   });
 
   const checkOut = useMutation({
-    mutationFn: ({ id, body }: { id: number; body: { amount: number; payments?: Array<{ paymentMethod: string; amount: number }> } }) =>
+    mutationFn: ({ id, body }: { id: number; body: { amount: number; cashShiftId?: number; payments?: Array<{ paymentMethod: string; amount: number }> } }) =>
       resourceApi.update(`stays/${id}/check-out`, body),
     onSuccess: () => {
       toast.success("Check-out realizado");
       setCheckoutId(null);
       setPaymentMethod("CASH");
+      setCashShiftId("");
       void queryClient.invalidateQueries();
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -166,6 +169,7 @@ export function StaysPage() {
   const addCharge = useMutation({
     mutationFn: () =>
       resourceApi.create("sales", {
+        ...(cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
         ...(getValue(chargeStay ?? {}, "customer.id")
           ? { customerId: Number(getValue(chargeStay ?? {}, "customer.id")) }
           : {}),
@@ -177,6 +181,7 @@ export function StaysPage() {
       setManualDescription("");
       setManualAmount("");
       setChargeItems([]);
+      setCashShiftId("");
       void queryClient.invalidateQueries();
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -407,7 +412,13 @@ export function StaysPage() {
         onOpenChange={(value) => !value && setCheckoutId(null)}
         onConfirm={() =>
           checkoutId &&
-          checkOut.mutate({ id: checkoutId, body: { amount: lodgingAmount } })
+          checkOut.mutate({
+            id: checkoutId,
+            body: {
+              amount: lodgingAmount,
+              ...(cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
+            },
+          })
         }
       />
 
@@ -424,6 +435,8 @@ export function StaysPage() {
           </DialogDescription>
 
           <div className="mt-4 space-y-4">
+            <CashShiftSelect value={cashShiftId} onChange={setCashShiftId} />
+
             <div className="rounded-md border border-border bg-muted p-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Alojamiento</span>
@@ -473,6 +486,7 @@ export function StaysPage() {
                   id: checkoutId,
                   body: {
                     amount: lodgingDue,
+                    ...(cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
                     payments: [
                       {
                         paymentMethod,
@@ -507,6 +521,10 @@ export function StaysPage() {
           <DialogDescription className="mt-1 text-sm text-muted-foreground">
             El cargo queda pendiente y se suma al total de la estadía.
           </DialogDescription>
+
+          <div className="mt-4">
+            <CashShiftSelect value={cashShiftId} onChange={setCashShiftId} />
+          </div>
 
           <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="space-y-3">

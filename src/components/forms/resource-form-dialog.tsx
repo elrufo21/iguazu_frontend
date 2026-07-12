@@ -8,6 +8,7 @@ import {
 import type { z } from "zod";
 import { resourceApi } from "../../lib/api";
 import { getValue } from "../../lib/utils";
+import { useAuthStore } from "../../store/auth.store";
 import type { AnyRow } from "../../types";
 import { Button } from "../ui/button";
 import {
@@ -45,6 +46,7 @@ export type FieldConfig = {
   createCustomer?: boolean;
   step?: string;
   helper?: string;
+  adminOnly?: boolean;
   onChange?: (value: unknown, form: UseFormReturn<FormValues>) => void;
 };
 
@@ -72,16 +74,21 @@ export function ResourceFormDialog({
   const form = useForm<FormValues>({
     resolver: zodResolver(schema as any),
   });
+  const user = useAuthStore((state) => state.user);
+  const visibleFields = useMemo(
+    () => fields.filter((field) => !field.adminOnly || user?.role === "ADMIN"),
+    [fields, user?.role],
+  );
 
   useEffect(() => {
     const values = Object.fromEntries(
-      fields.map((field) => [
+      visibleFields.map((field) => [
         field.name,
         getValue(initialValue ?? {}, field.name) ?? "",
       ]),
     );
     form.reset(values);
-  }, [fields, form, initialValue, open]);
+  }, [visibleFields, form, initialValue, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -98,7 +105,7 @@ export function ResourceFormDialog({
           className="mt-5 grid gap-4 sm:grid-cols-2"
           onSubmit={form.handleSubmit(onSubmit)}
         >
-          {fields.map((field) => (
+          {visibleFields.map((field) => (
             <FieldInput
               key={field.name}
               field={field}

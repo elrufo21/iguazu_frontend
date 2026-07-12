@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { DataTable, type AppColumn } from '../../components/data-table/data-table';
+import { CashShiftSelect } from '../../components/cash-shift-select';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
@@ -122,6 +123,7 @@ function NewPaymentDialog({
   const [periodEnd, setPeriodEnd] = useState(todayStr());
   const [amount, setAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [cashShiftId, setCashShiftId] = useState('');
   const [selectedPenaltyIds, setSelectedPenaltyIds] = useState<number[]>([]);
 
   const employee = employees.find((e) => Number(e.id) === employeeId) ?? null;
@@ -163,6 +165,7 @@ function NewPaymentDialog({
     setPeriodEnd(todayStr());
     setAmount('');
     setPaymentMethod('CASH');
+    setCashShiftId('');
   };
 
   const create = useMutation({
@@ -173,6 +176,7 @@ function NewPaymentDialog({
         periodEnd,
         amount: manualGross || undefined,
         paymentMethod,
+        ...(cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
         penaltyIds: selectedPenaltyIds,
       }),
     onSuccess: () => {
@@ -276,6 +280,8 @@ function NewPaymentDialog({
               ))}
             </Select>
           </div>
+
+          <CashShiftSelect value={cashShiftId} onChange={setCashShiftId} />
         </div>
 
         {/* Resumen de deducciones del empleado */}

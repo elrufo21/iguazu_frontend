@@ -40,7 +40,7 @@ const roles: { value: EditableRole; label: string }[] = [
 // Traducción de cada permiso a una etiqueta humana.
 // Estructura: { 'METODO /ruta': { label, group, icon } }
 // ============================================================
-type PermMeta = { label: string; group: string; icon: LucideIcon };
+type PermMeta = { label: string; group: string; icon: LucideIcon; description?: string };
 
 const PERM_META: Record<string, PermMeta> = {
   // Habitaciones
@@ -119,8 +119,18 @@ const PERM_META: Record<string, PermMeta> = {
   'POST /inventory/out': { label: 'Salida de stock', group: 'Inventario', icon: Boxes },
   'POST /inventory/loss': { label: 'Registrar pérdida', group: 'Inventario', icon: Boxes },
   'POST /inventory/adjust': { label: 'Ajustar stock', group: 'Inventario', icon: Boxes },
-  'GET /inventory/movements': { label: 'Ver movimientos', group: 'Inventario', icon: Boxes },
-  'GET /inventory/movements/product/:productId': { label: 'Ver movimientos por producto', group: 'Inventario', icon: Boxes },
+  'GET /inventory/movements': {
+    label: 'Ver historial de stock',
+    group: 'Inventario',
+    icon: Boxes,
+    description: 'Lista entradas, salidas, ajustes y pérdidas de inventario.',
+  },
+  'GET /inventory/movements/product/:productId': {
+    label: 'Ver historial de un producto',
+    group: 'Inventario',
+    icon: Boxes,
+    description: 'Consulta movimientos filtrados por producto.',
+  },
 
   // Caja
   'POST /cash-shift/open': { label: 'Abrir caja', group: 'Caja', icon: WalletCards },
@@ -129,10 +139,36 @@ const PERM_META: Record<string, PermMeta> = {
   'GET /cash-shift/:id': { label: 'Ver caja', group: 'Caja', icon: WalletCards },
 
   // Movimientos de caja
-  'GET /cash-movements': { label: 'Ver movimientos', group: 'Movimientos de caja', icon: Banknote },
-  'GET /cash-movements/:id': { label: 'Ver movimiento', group: 'Movimientos de caja', icon: Banknote },
-  'GET /cash-movements/by-shift/:cashShiftId': { label: 'Ver movimientos por turno', group: 'Movimientos de caja', icon: Banknote },
-  'POST /cash-movements/:id/reverse': { label: 'Revertir movimiento', group: 'Movimientos de caja', icon: Banknote },
+  'GET /cash-movements': {
+    label: 'Ver lista de movimientos',
+    group: 'Movimientos de caja',
+    icon: Banknote,
+    description: 'Muestra la pantalla de movimientos. Usuarios ven solo sus cajas; ADMIN ve todo.',
+  },
+  'GET /cash-movements/:id': {
+    label: 'Ver detalle de movimiento',
+    group: 'Movimientos de caja',
+    icon: Banknote,
+    description: 'Permite consultar un movimiento específico.',
+  },
+  'GET /cash-movements/by-shift/:cashShiftId': {
+    label: 'Ver movimientos de una caja',
+    group: 'Movimientos de caja',
+    icon: Banknote,
+    description: 'Permite consultar movimientos filtrados por caja/turno.',
+  },
+  'POST /cash-movements/expense': {
+    label: 'Registrar salida de dinero',
+    group: 'Movimientos de caja',
+    icon: Banknote,
+    description: 'Permite registrar egresos como retiro, compra o ajuste.',
+  },
+  'POST /cash-movements/:id/reverse': {
+    label: 'Revertir movimiento',
+    group: 'Movimientos de caja',
+    icon: Banknote,
+    description: 'Crea un movimiento contrario para corregir uno ya registrado.',
+  },
 
   // Cierres de caja
   'POST /cash-closures/close': { label: 'Cerrar caja (arqueo)', group: 'Cierres de caja', icon: CreditCard },
@@ -372,7 +408,13 @@ export function PermissionsPage() {
                           <Badge tone={METHOD_TONES[method] ?? 'slate'} className="shrink-0">
                             {METHOD_LABELS[method] ?? method}
                           </Badge>
-                          <span className="flex-1">{meta.label}</span>
+                          <span className="flex-1">
+                            <span className="block font-medium">{meta.label}</span>
+                            {meta.description && (
+                              <span className="block text-xs text-muted-foreground">{meta.description}</span>
+                            )}
+                            <span className="block text-[11px] text-muted-foreground/70">{perm}</span>
+                          </span>
                         </label>
                       );
                     })}

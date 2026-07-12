@@ -467,6 +467,33 @@ export const modules: Record<string, ResourceConfig> = {
         render: (value) => <StatusBadge value={value} />,
       },
     ],
+    exportRows: {
+      fileName: "productos",
+      columns: [
+        { header: "Producto", accessor: "name" },
+        { header: "Descripción", accessor: "description" },
+        { header: "Costo", accessor: "purchasePrice", type: "money" },
+        { header: "Precio venta", accessor: "salePrice", type: "money" },
+        {
+          header: "Ganancia unitaria",
+          value: (row) => Number(row.salePrice ?? 0) - Number(row.purchasePrice ?? 0),
+          type: "money",
+        },
+        {
+          header: "Margen %",
+          value: (row) => {
+            const price = Number(row.salePrice ?? 0);
+            if (!price) return "0%";
+            return `${(((price - Number(row.purchasePrice ?? 0)) / price) * 100).toFixed(2)}%`;
+          },
+        },
+        { header: "Unidad", accessor: "unit" },
+        { header: "Factor compra", accessor: "purchaseFactor" },
+        { header: "Stock", accessor: "stock" },
+        { header: "Stock mínimo", accessor: "minStock" },
+        { header: "Estado", accessor: "active", type: "status" },
+      ],
+    },
   },
   inventory: {
     key: "inventory",
@@ -511,7 +538,7 @@ export const modules: Record<string, ResourceConfig> = {
       movementType: req,
       productId: num,
       quantity: num,
-      reason: opt,
+      reason: req,
     }),
     toPayload: (values) => {
       const payload = { ...values };
@@ -563,6 +590,15 @@ export const modules: Record<string, ResourceConfig> = {
         type: "number",
         step: "0.01",
       },
+      {
+        name: "cashShiftId",
+        label: "Caja abierta",
+        type: "relation",
+        endpoint: "cash-shift/open/all",
+        labelKey: "openedBy.employee.fullName",
+        optional: true,
+        adminOnly: true,
+      },
       { name: "notes", label: "Notas", type: "textarea" },
     ],
     schema: form({
@@ -571,6 +607,7 @@ export const modules: Record<string, ResourceConfig> = {
       startDate: dateReq,
       endDate: dateReq,
       depositAmount: optNum,
+      cashShiftId: optNum,
       notes: opt,
     }),
     requiresCustomer: true,
@@ -647,6 +684,15 @@ export const modules: Record<string, ResourceConfig> = {
         label: "Salida esperada",
         type: "datetime-local",
       },
+      {
+        name: "cashShiftId",
+        label: "Caja abierta",
+        type: "relation",
+        endpoint: "cash-shift/open/all",
+        labelKey: "openedBy.employee.fullName",
+        optional: true,
+        adminOnly: true,
+      },
     ],
     schema: form({
       customerId: optNum,
@@ -654,6 +700,7 @@ export const modules: Record<string, ResourceConfig> = {
       priceTypeId: num,
       agreedPrice: optNum,
       expectedCheckOut: opt,
+      cashShiftId: optNum,
     }),
     columns: [
       { header: "Habitación", accessor: "room.roomNumber" },
@@ -828,12 +875,22 @@ export const modules: Record<string, ResourceConfig> = {
         type: "select",
         options: paymentOptions,
       },
+      {
+        name: "cashShiftId",
+        label: "Caja abierta",
+        type: "relation",
+        endpoint: "cash-shift/open/all",
+        labelKey: "openedBy.employee.fullName",
+        optional: true,
+        adminOnly: true,
+      },
       { name: "description", label: "Motivo", type: "textarea" },
     ],
     schema: form({
       category: req,
       amount: num,
       paymentMethod: req,
+      cashShiftId: optNum,
       description: req,
     }),
     columns: [
