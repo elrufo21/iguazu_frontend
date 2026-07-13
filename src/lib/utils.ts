@@ -131,3 +131,9 @@ export function valueLabel(value: unknown) {
 export function columnLabel(value: string) {
   return columnLabels[value] ?? value;
 }
+
+export function productTitle(product: Record<string, unknown>, fallback = 'Producto') {
+  const name = String(product.name ?? fallback).trim();
+  const description = String(product.description ?? '').trim();
+  return description ? `${name} - ${description}` : name;
+}

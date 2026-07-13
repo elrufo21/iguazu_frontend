@@ -29,7 +29,7 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { resourceApi } from "../../lib/api";
 import { errorMessage } from "../../lib/api-error";
-import { dateTime, getValue, money } from "../../lib/utils";
+import { dateTime, getValue, money, productTitle } from "../../lib/utils";
 import type { AnyRow } from "../../types";
 import { modules } from "../module-config";
 import { normalizeRows, saveResource } from "../shared/resource-save";
@@ -121,9 +121,7 @@ export function StaysPage() {
     if (!term) return rows.slice(0, 12);
     return rows
       .filter((product) =>
-        String(product.name ?? "")
-          .toLowerCase()
-          .includes(term),
+        productTitle(product).toLowerCase().includes(term),
       )
       .slice(0, 12);
   }, [productSearch, productSource, products, roomProducts]);
@@ -214,7 +212,7 @@ export function StaysPage() {
           itemType: "PRODUCT",
           source,
           productId,
-          description: `${String(product.name ?? "Producto")} (${source === "ROOM" ? "habitación" : "tienda"})`,
+          description: `${productTitle(product)} (${source === "ROOM" ? "habitación" : "tienda"})`,
           quantity: 1,
           unitPrice: Number(product.salePrice ?? 0),
         },
@@ -595,7 +593,7 @@ export function StaysPage() {
                         onClick={() => addProductCharge(product)}
                       >
                         <span className="block text-sm font-medium">
-                          {String(product.name ?? "Producto")}
+                          {productTitle(product)}
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">
                           {money(product.salePrice)} ·{" "}

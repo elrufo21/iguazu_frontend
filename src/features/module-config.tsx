@@ -3,7 +3,7 @@ import type { UseFormReturn } from "react-hook-form";
 import { StatusBadge } from "../components/status-badge/status-badge";
 import type { FormValues } from "../components/forms/resource-form-dialog";
 import { resourceApi } from "../lib/api";
-import { dateTime, getValue, money } from "../lib/utils";
+import { dateTime, getValue, money, productTitle } from "../lib/utils";
 import type { ResourceConfig } from "./shared/crud-page";
 import { normalizeRows } from "./shared/resource-save";
 
@@ -456,7 +456,7 @@ export const modules: Record<string, ResourceConfig> = {
       };
     },
     columns: [
-      { header: "Producto", accessor: "name" },
+      { header: "Producto", accessor: "name", render: (_value, row) => productTitle(row) },
       { header: "Precio", accessor: "salePrice", render: money },
       { header: "Unidad", accessor: "unit" },
       { header: "Stock", accessor: "stock" },
@@ -550,7 +550,7 @@ export const modules: Record<string, ResourceConfig> = {
       };
     },
     columns: [
-      { header: "Producto", accessor: "product.name" },
+      { header: "Producto", accessor: "product.name", render: (_value, row) => productTitle((row.product as Record<string, unknown>) ?? {}) },
       {
         header: "Tipo",
         accessor: "type",

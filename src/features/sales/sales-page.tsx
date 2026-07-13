@@ -26,7 +26,7 @@ import {
 } from "../../components/ui/tabs";
 import { resourceApi } from "../../lib/api";
 import { errorMessage } from "../../lib/api-error";
-import { getValue, money } from "../../lib/utils";
+import { getValue, money, productTitle } from "../../lib/utils";
 import type { AnyRow } from "../../types";
 import { normalizeRows } from "../shared/resource-save";
 
@@ -166,9 +166,7 @@ export function SalesPage() {
     const term = search.trim().toLowerCase();
     if (!term) return products;
     return products.filter((product) =>
-      String(product.name ?? "")
-        .toLowerCase()
-        .includes(term),
+      productTitle(product).toLowerCase().includes(term),
     );
   }, [products, search]);
   const total = cart.reduce(
@@ -245,7 +243,7 @@ export function SalesPage() {
           key: `product-${productId}`,
           itemType: "PRODUCT",
           productId,
-          description: String(product.name ?? "Producto"),
+          description: productTitle(product),
           quantity: 1,
           unitPrice: Number(product.salePrice ?? 0),
         },
@@ -272,7 +270,7 @@ export function SalesPage() {
           key,
           itemType: "PRODUCT",
           productId: Number(product?.id ?? 0),
-          description: String(getValue(item, "product.name") ?? "Producto"),
+          description: productTitle((item.product as AnyRow | undefined) ?? {}),
           quantity: 1,
           unitPrice: Number(getValue(item, "product.salePrice") ?? 0),
         },
@@ -365,7 +363,7 @@ export function SalesPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold text-sm line-clamp-2 leading-tight">
-                          {String(product.name ?? "Producto")}
+                          {productTitle(product)}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           Stock: {String(product.stock ?? 0)}
@@ -462,10 +460,7 @@ export function SalesPage() {
                               >
                                 <div>
                                   <p className="font-medium text-sm">
-                                    {String(
-                                      getValue(item, "product.name") ??
-                                        "Producto",
-                                    )}
+                                    {productTitle((item.product as AnyRow | undefined) ?? {})}
                                   </p>
                                   <p className="text-xs text-muted-foreground">
                                     Disponible: x{String(item.quantity)}

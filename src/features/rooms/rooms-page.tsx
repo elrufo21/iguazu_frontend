@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../../com
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { resourceApi } from '../../lib/api';
+import { productTitle } from '../../lib/utils';
 import type { AnyRow } from '../../types';
 import { modules } from '../module-config';
 import { normalizeRows, saveResource } from '../shared/resource-save';
@@ -62,7 +63,7 @@ export function RoomsPage() {
   const visibleProducts = useMemo(() => {
     const term = productSearch.trim().toLowerCase();
     if (!term) return products;
-    return products.filter((product) => String(product.name ?? '').toLowerCase().includes(term));
+    return products.filter((product) => productTitle(product).toLowerCase().includes(term));
   }, [products, productSearch]);
 
   useEffect(() => {
@@ -254,7 +255,7 @@ export function RoomsPage() {
                       className="grid grid-cols-[1fr_88px] items-center gap-3 rounded-md border border-border bg-white p-3"
                     >
                       <span>
-                        <span className="block text-sm font-medium">{String(product.name ?? `Producto #${productId}`)}</span>
+                        <span className="block text-sm font-medium">{productTitle(product, `Producto #${productId}`)}</span>
                         <span className="block text-xs text-muted-foreground">Stock general: {Number(product.stock ?? 0)}</span>
                       </span>
                       <span className="space-y-1">
