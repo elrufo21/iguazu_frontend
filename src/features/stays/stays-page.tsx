@@ -61,6 +61,10 @@ export function StaysPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const config = modules.stays;
+  const checkInInitialValue = useMemo(
+    () => (open ? { expectedCheckOut: tomorrowAtNoonInputValue() } : null),
+    [open],
+  );
   const staysQuery = useQuery({
     queryKey: ["stays", "active"],
     queryFn: () => resourceApi.list("stays/active"),
@@ -400,6 +404,7 @@ export function StaysPage() {
         description="Elige habitación, tarifa y cliente opcional."
         fields={config.fields}
         schema={config.schema}
+        initialValue={checkInInitialValue}
         saving={checkIn.isPending}
         onOpenChange={setOpen}
         onSubmit={(values) => checkIn.mutate(values)}
@@ -766,6 +771,14 @@ export function StaysPage() {
       </Dialog>
     </section>
   );
+}
+
+function tomorrowAtNoonInputValue() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(12, 0, 0, 0);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function Metric({ label, value }: { label: string; value: number }) {
