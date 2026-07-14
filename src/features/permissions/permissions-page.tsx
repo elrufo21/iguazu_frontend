@@ -177,6 +177,7 @@ const PERM_META: Record<string, PermMeta> = {
   'GET /cash-closures': { label: 'Ver cierres', group: 'Cierres de caja', icon: CreditCard },
   'GET /cash-closures/:id': { label: 'Ver cierre', group: 'Cierres de caja', icon: CreditCard },
   'POST /cash-closures/:id/reopen': { label: 'Reabrir caja (solo ADMIN)', group: 'Cierres de caja', icon: CreditCard },
+  'PATCH /cash-closures/:id/counts': { label: 'Corregir conteo de cierre (solo ADMIN)', group: 'Cierres de caja', icon: CreditCard },
   'POST /cash-closures/:id/settle': { label: 'Cuadrar diferencia', group: 'Cierres de caja', icon: CreditCard },
 
   // Comprobantes / Facturación
