@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
 import { CashShiftSelect } from "../../components/cash-shift-select";
@@ -307,6 +307,14 @@ export function SalesPage() {
     );
   };
 
+  const updateUnitPrice = (key: string, unitPrice: number) => {
+    setCart((items) =>
+      items.map((item) =>
+        item.key === key ? { ...item, unitPrice: Math.max(0, unitPrice) } : item,
+      ),
+    );
+  };
+
   return (
     <section className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -318,6 +326,9 @@ export function SalesPage() {
             Cobra al momento o carga consumos a una habitación activa.
           </p>
         </div>
+        <Button asChild variant="outline">
+          <Link to="/sales/history">Historial</Link>
+        </Button>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
@@ -662,15 +673,12 @@ export function SalesPage() {
                             >
                               {item.description}
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                              {money(item.unitPrice)} c/u
-                            </p>
                           </div>
                           <span className="font-semibold text-sm whitespace-nowrap">
                             {money(item.quantity * item.unitPrice)}
                           </span>
                         </div>
-                        <div className="mt-3 flex items-center justify-between">
+                        <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-end gap-3">
                           <div className="flex items-center rounded-md border border-border">
                             <button
                               type="button"
@@ -689,6 +697,22 @@ export function SalesPage() {
                             >
                               <Plus className="h-3 w-3" />
                             </button>
+                          </div>
+                          <div className="min-w-0">
+                            <Label className="text-xs">Precio</Label>
+                            <Input
+                              className="mt-1 h-8"
+                              min="0"
+                              step="0.01"
+                              type="number"
+                              value={String(item.unitPrice)}
+                              onChange={(event) =>
+                                updateUnitPrice(
+                                  item.key,
+                                  Number(event.target.value || 0),
+                                )
+                              }
+                            />
                           </div>
                           <Button
                             variant="ghost"

@@ -8,9 +8,12 @@ import {
   CreditCard,
   FileText,
   Package,
+  Pencil,
+  Plus,
   Receipt,
   Search,
   ShoppingBag,
+  Trash2,
   User,
   Zap,
 } from 'lucide-react';
@@ -33,7 +36,7 @@ import { Select } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import { resourceApi } from '../../lib/api';
 import { errorMessage } from '../../lib/api-error';
-import { dateTime, getValue, money } from '../../lib/utils';
+import { dateTime, getValue, money, productTitle } from '../../lib/utils';
 import { useAuthStore } from '../../store/auth.store';
 import type { AnyRow } from '../../types';
 import { normalizeRows } from '../shared/resource-save';
@@ -67,22 +70,35 @@ const SUNAT_TYPE_LABELS: Record<string, string> = {
   '08': 'Nota de Débito',
 };
 
+type EditDetail = {
+  id?: number;
+  itemType: string;
+  productId?: number;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+};
+
 function SaleCard({
   sale,
   onPay,
   onInvoice,
+  onEdit,
   onCancel,
   isPaying,
   isInvoicing,
   isCancelling,
+  canEdit,
 }: {
   sale: AnyRow;
   onPay: (sale: AnyRow) => void;
   onInvoice: (sale: AnyRow) => void;
+  onEdit: (sale: AnyRow) => void;
   onCancel: (sale: AnyRow) => void;
   isPaying: boolean;
   isInvoicing: boolean;
   isCancelling: boolean;
+  canEdit: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const details = (sale.details as AnyRow[] | undefined) ?? [];
@@ -219,6 +235,12 @@ function SaleCard({
                 {SUNAT_TYPE_LABELS[String(invoice?.invoiceType ?? '03')] ?? 'Comprobante'} rechazado ({String(invoice?.sunatCode ?? 'error')})
               </span>
             )}
+            {canEdit && (
+              <Button size="sm" variant="outline" onClick={() => onEdit(sale)} className="gap-1.5">
+                <Pencil className="h-4 w-4" />
+                Editar
+              </Button>
+            )}
             {status === 'OPEN' && (
               <Button size="sm" disabled={isPaying} onClick={() => onPay(sale)} className="gap-1.5">
                 <CreditCard className="h-4 w-4" />
@@ -298,12 +320,19 @@ export function SalesHistoryPage() {
   const [cancelSale, setCancelSale] = useState<AnyRow | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelCashShiftId, setCancelCashShiftId] = useState('');
+  const [editSale, setEditSale] = useState<AnyRow | null>(null);
+  const [editReason, setEditReason] = useState('');
+  const [editDetails, setEditDetails] = useState<EditDetail[]>([]);
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
 
   const salesQuery = useQuery({
     queryKey: ['sales'],
     queryFn: () => resourceApi.list('sales'),
+  });
+  const productsQuery = useQuery({
+    queryKey: ['products'],
+    queryFn: () => resourceApi.list('products'),
   });
 
   const paySale = useMutation({
@@ -354,7 +383,30 @@ export function SalesHistoryPage() {
     onError: (error) => toast.error(errorMessage(error)),
   });
 
+  const edit = useMutation({
+    mutationFn: () =>
+      resourceApi.update(`sales/${editSale?.id}`, {
+        reason: editReason.trim(),
+        details: editDetails.map((detail) => ({
+          ...(detail.id ? { id: detail.id } : {}),
+          ...(detail.productId ? { productId: detail.productId } : {}),
+          quantity: detail.quantity,
+          unitPrice: detail.unitPrice,
+        })),
+      }),
+    onSuccess: () => {
+      toast.success('Venta editada');
+      setEditSale(null);
+      setEditReason('');
+      setEditDetails([]);
+      void queryClient.invalidateQueries({ queryKey: ['sales'] });
+      void queryClient.invalidateQueries({ queryKey: ['audit'] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
   const sales = normalizeRows(salesQuery.data);
+  const products = normalizeRows(productsQuery.data).filter((product) => product.active !== false);
 
   const filtered = useMemo(() => {
     let list = [...sales];
@@ -380,6 +432,11 @@ export function SalesHistoryPage() {
     const totalPending = open.reduce((sum, s) => sum + Number(s.total ?? 0), 0);
     return { paid: paid.length, open: open.length, totalRevenue, totalPending, count: sales.length };
   }, [sales]);
+
+  const canEditSale = (sale: AnyRow) =>
+    String(sale.status) !== 'CANCELLED' &&
+    !['ACCEPTED', 'OBSERVED'].includes(String(getValue(sale, 'invoice.status') ?? '')) &&
+    (user?.role === 'ADMIN' || Number(sale.userId) === Number(user?.id));
 
   return (
     <section className="space-y-6">
@@ -458,6 +515,20 @@ export function SalesHistoryPage() {
                 setInvoiceSale(s);
                 setInvoiceType('auto');
               }}
+              onEdit={(s) => {
+                setEditSale(s);
+                setEditReason('');
+                setEditDetails(
+                  ((s.details as AnyRow[] | undefined) ?? []).map((detail) => ({
+                    id: Number(detail.id),
+                    itemType: String(detail.itemType),
+                    productId: detail.productId ? Number(detail.productId) : undefined,
+                    description: String(detail.description ?? ''),
+                    quantity: Number(detail.quantity ?? 1),
+                    unitPrice: Number(detail.unitPrice ?? 0),
+                  })),
+                );
+              }}
               onCancel={(s) => {
                 setCancelSale(s);
                 setCancelReason('');
@@ -466,6 +537,7 @@ export function SalesHistoryPage() {
               isPaying={paySale.isPending}
               isInvoicing={issueInvoice.isPending && issueInvoice.variables?.id === sale.id}
               isCancelling={cancel.isPending && cancel.variables?.id === sale.id}
+              canEdit={canEditSale(sale)}
             />
           ))}
         </div>
@@ -519,7 +591,196 @@ export function SalesHistoryPage() {
         }}
         pending={cancel.isPending}
       />
+
+      <EditSaleDialog
+        sale={editSale}
+        reason={editReason}
+        details={editDetails}
+        products={products}
+        onReasonChange={setEditReason}
+        onDetailsChange={setEditDetails}
+        onOpenChange={(open) => {
+          if (!open) setEditSale(null);
+        }}
+        onConfirm={() => {
+          if (!editReason.trim()) {
+            toast.error('Ingresa el motivo de la edición.');
+            return;
+          }
+          if (editDetails.length === 0) {
+            toast.error('La venta debe conservar al menos un detalle.');
+            return;
+          }
+          edit.mutate();
+        }}
+        pending={edit.isPending}
+      />
     </section>
+  );
+}
+
+function EditSaleDialog({
+  sale,
+  reason,
+  details,
+  products,
+  onReasonChange,
+  onDetailsChange,
+  onOpenChange,
+  onConfirm,
+  pending,
+}: {
+  sale: AnyRow | null;
+  reason: string;
+  details: EditDetail[];
+  products: AnyRow[];
+  onReasonChange: (value: string) => void;
+  onDetailsChange: (value: EditDetail[]) => void;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+  pending: boolean;
+}) {
+  const [productId, setProductId] = useState('');
+  if (!sale) return null;
+  const total = details.reduce((sum, detail) => sum + detail.quantity * detail.unitPrice, 0);
+  const addProduct = () => {
+    const product = products.find((item) => String(item.id) === productId);
+    if (!product) return;
+    const id = Number(product.id);
+    const exists = details.find((detail) => detail.productId === id);
+    if (exists) {
+      onDetailsChange(
+        details.map((detail) =>
+          detail === exists ? { ...detail, quantity: detail.quantity + 1 } : detail,
+        ),
+      );
+    } else {
+      onDetailsChange([
+        ...details,
+        {
+          itemType: 'PRODUCT',
+          productId: id,
+          description: productTitle(product),
+          quantity: 1,
+          unitPrice: Number(product.salePrice ?? 0),
+        },
+      ]);
+    }
+    setProductId('');
+  };
+
+  return (
+    <Dialog open={sale !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[min(620px,calc(100vw-2rem))] p-5">
+        <DialogTitle className="text-lg font-semibold">Editar venta #{String(sale.id)}</DialogTitle>
+        <DialogDescription className="mt-2 text-sm text-muted-foreground">
+          Agrega o quita productos y ajusta cantidad/precio. La descripción viene del producto.
+        </DialogDescription>
+
+        <div className="mt-4 space-y-3">
+          {details.map((detail) => {
+            const isProduct = detail.itemType === 'PRODUCT';
+            return (
+              <div key={detail.id ?? `new-${detail.productId}`} className="rounded-md border border-border p-3">
+                <div className="grid gap-3 sm:grid-cols-[1fr_110px_130px_auto] sm:items-end">
+                  <div>
+                    <p className="text-sm font-medium">{detail.description}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {ITEM_TYPE_LABELS[detail.itemType]?.label ?? detail.itemType}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cantidad</Label>
+                    <Input
+                      disabled={!isProduct}
+                      min="1"
+                      step="1"
+                      type="number"
+                      value={String(detail.quantity)}
+                      onChange={(event) =>
+                        onDetailsChange(
+                          details.map((item) =>
+                            item === detail
+                              ? { ...item, quantity: Math.max(1, Number(event.target.value || 1)) }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Precio</Label>
+                    <Input
+                      min="0"
+                      step="0.01"
+                      type="number"
+                      value={String(detail.unitPrice)}
+                      onChange={(event) =>
+                        onDetailsChange(
+                          details.map((item) =>
+                            item === detail
+                              ? { ...item, unitPrice: Math.max(0, Number(event.target.value || 0)) }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={!isProduct}
+                    onClick={() => onDetailsChange(details.filter((item) => item !== detail))}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Subtotal {money(detail.quantity * detail.unitPrice)}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+          <Select value={productId} onChange={(event) => setProductId(event.target.value)}>
+            <option value="">Agregar producto...</option>
+            {products.map((product) => (
+              <option key={String(product.id)} value={String(product.id)}>
+                {productTitle(product)} · {money(product.salePrice)}
+              </option>
+            ))}
+          </Select>
+          <Button type="button" variant="outline" onClick={addProduct} disabled={!productId}>
+            <Plus className="h-4 w-4" />
+            Agregar
+          </Button>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <Label>Motivo</Label>
+          <Textarea
+            value={reason}
+            onChange={(event) => onReasonChange(event.target.value)}
+            placeholder="Ej. Precio corregido por promoción autorizada..."
+          />
+        </div>
+
+        <div className="mt-5 flex items-center justify-between gap-2">
+          <span className="text-sm font-semibold">Nuevo total: {money(total)}</span>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+              Cancelar
+            </Button>
+            <Button onClick={onConfirm} disabled={pending}>
+              {pending ? 'Guardando...' : 'Guardar edición'}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

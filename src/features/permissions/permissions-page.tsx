@@ -100,6 +100,7 @@ const PERM_META: Record<string, PermMeta> = {
   'POST /sales': { label: 'Crear venta', group: 'Ventas', icon: Receipt },
   'POST /sales/:id/pay': { label: 'Cobrar venta pendiente', group: 'Ventas', icon: Receipt },
   'POST /sales/:id/cancel': { label: 'Anular venta', group: 'Ventas', icon: Receipt },
+  'PATCH /sales/:id': { label: 'Editar venta pendiente', group: 'Ventas', icon: Receipt },
   'GET /sales': { label: 'Ver ventas', group: 'Ventas', icon: Receipt },
   'GET /sales/:id': { label: 'Ver venta', group: 'Ventas', icon: Receipt },
   'GET /sales/by-shift/:cashShiftId': { label: 'Ver ventas por turno', group: 'Ventas', icon: Receipt },
