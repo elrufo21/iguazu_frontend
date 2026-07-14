@@ -84,6 +84,9 @@ export const valueLabels: Record<string, string> = {
   CASH_OPEN: 'Apertura de caja',
   CASH_CLOSE: 'Cierre de caja',
   CASH_EXPENSE: 'Egreso de caja',
+  CASH_REOPEN: 'Reapertura de caja',
+  CASH_SETTLE: 'Cuadre de caja',
+  CASH_CLOSURE_CORRECT_COUNTS: 'Corrección de conteo',
 };
 
 export const columnLabels: Record<string, string> = {

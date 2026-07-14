@@ -4,6 +4,7 @@ import {
   BedDouble,
   Boxes,
   CalendarDays,
+  ClipboardList,
   CreditCard,
   FileText,
   Gauge,
@@ -43,6 +44,7 @@ export const navItems = [
   { label: "Tipos precio", path: "/price-types", icon: Tags, permission: "GET /price-types" },
   { label: "Tipos habitación", path: "/room-types", icon: BedDouble, permission: "GET /room-types" },
   { label: "Tarifas", path: "/room-type-prices", icon: CreditCard, permission: "GET /room-type-prices" },
+  { label: "Auditoría", path: "/audit", icon: ClipboardList, permission: "GET /audit" },
   { label: "Permisos", path: "/permissions", icon: ShieldCheck, adminOnly: true },
 ];
 
@@ -86,7 +88,7 @@ export const navGroups = [
   },
   {
     label: "Configuración",
-    items: getNavItems(["/room-type-prices", "/permissions"]),
+    items: getNavItems(["/room-type-prices", "/audit", "/permissions"]),
   },
 ];
 

@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppLayout } from '../components/layout/app-layout';
 import { ProtectedRoute } from '../components/layout/protected-route';
 import { AttendancePage } from '../features/attendance/attendance-page';
+import { AuditPage } from '../features/audit/audit-page';
 import { BillingPage } from '../features/billing/billing-page';
 import { LoginPage } from '../features/auth/login-page';
 import { CashClosuresPage } from '../features/cash-closures/cash-closures-page';
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
       { path: 'staff-discounts', element: <StaffDiscountsPage /> },
       { path: 'penalties', element: <PenaltiesPage /> },
       { path: 'cash-closures', element: <CashClosuresPage /> },
+      { path: 'audit', element: <AuditPage /> },
       { path: 'permissions', element: <PermissionsPage /> },
     ],
   },
