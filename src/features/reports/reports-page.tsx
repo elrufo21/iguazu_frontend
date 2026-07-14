@@ -36,6 +36,7 @@ type ReportKey =
   | 'sales-full'
   | 'occupancy'
   | 'product-sales'
+  | 'product-sales-by-user'
   | 'inventory'
   | 'staff';
 
@@ -47,6 +48,7 @@ const reports: ReportDef[] = [
   { value: 'sales-full', label: 'Ventas e ingresos', icon: TrendingUp },
   { value: 'occupancy', label: 'Ocupación', icon: BedDouble },
   { value: 'product-sales', label: 'Productos vendidos', icon: Package },
+  { value: 'product-sales-by-user', label: 'Productos por usuario', icon: Users },
   { value: 'inventory', label: 'Inventario y pérdidas', icon: Boxes },
   { value: 'staff', label: 'Planilla de personal', icon: Users },
 ];
@@ -132,6 +134,8 @@ function ReportBody({ report, data }: { report: ReportKey; data: AnyRow }) {
       return <OccupancyReport data={data} />;
     case 'product-sales':
       return <ProductSalesReport data={data} />;
+    case 'product-sales-by-user':
+      return <ProductSalesByUserReport data={data} />;
     case 'inventory':
       return <InventoryReport data={data} />;
     case 'staff':
@@ -427,6 +431,29 @@ function ProductSalesReport({ data }: { data: AnyRow }) {
         <KpiCard label="Productos distintos" value={rows.length} tone="slate" />
       </KpiGrid>
 
+      <DataTable data={rows} columns={columns} />
+    </div>
+  );
+}
+
+function ProductSalesByUserReport({ data }: { data: AnyRow }) {
+  const rows = normalizeRows(data.rows);
+  const totalSold = rows.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0);
+  const totalAmount = rows.reduce((sum, row) => sum + Number(row.total ?? 0), 0);
+  const columns: AppColumn[] = [
+    { header: 'Producto', accessor: 'product' },
+    { header: 'Usuario', accessor: 'user' },
+    { header: 'Cantidad', accessor: 'quantity' },
+    { header: 'Total', accessor: 'total', render: (v) => money(Number(v ?? 0)) },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <KpiGrid>
+        <KpiCard label="Unidades vendidas" value={totalSold} tone="blue" />
+        <KpiCard label="Monto total" value={money(totalAmount)} tone="green" />
+        <KpiCard label="Filas" value={rows.length} tone="slate" />
+      </KpiGrid>
       <DataTable data={rows} columns={columns} />
     </div>
   );
@@ -749,6 +776,9 @@ function buildExportSections(report: ReportKey, data: AnyRow): ExportSection[] {
     case 'product-sales':
       sections.push({ title: 'Productos vendidos', rows: normalizeRows(data.rows) });
       break;
+    case 'product-sales-by-user':
+      sections.push({ title: 'Productos por usuario', rows: normalizeRows(data.rows) });
+      break;
     case 'inventory':
       sections.push({ title: 'Stock bajo', rows: normalizeRows(data.lowStock) });
       sections.push({ title: 'Movimientos', rows: normalizeRows(data.movements) });
@@ -794,6 +824,8 @@ function summaryRows(report: ReportKey, data: AnyRow) {
       ]);
     case 'product-sales':
       return metricRows([['Productos distintos', normalizeRows(data.rows).length]]);
+    case 'product-sales-by-user':
+      return metricRows([['Filas', normalizeRows(data.rows).length]]);
     case 'inventory':
       return metricRows([
         ['Pérdidas', data.lossCount],

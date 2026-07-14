@@ -231,6 +231,7 @@ const PERM_META: Record<string, PermMeta> = {
   'GET /reports/sales-full': { label: 'Reporte de ventas e ingresos', group: 'Reportes', icon: TrendingUp },
   'GET /reports/sales-by-item-type': { label: 'Ventas por tipo de ítem', group: 'Reportes', icon: TrendingUp },
   'GET /reports/product-sales': { label: 'Productos vendidos', group: 'Reportes', icon: TrendingUp },
+  'GET /reports/product-sales-by-user': { label: 'Productos por usuario', group: 'Reportes', icon: TrendingUp },
   'GET /reports/occupancy': { label: 'Reporte de ocupación', group: 'Reportes', icon: TrendingUp },
   'GET /reports/inventory': { label: 'Reporte de inventario', group: 'Reportes', icon: TrendingUp },
   'GET /reports/staff': { label: 'Reporte de personal', group: 'Reportes', icon: TrendingUp },
