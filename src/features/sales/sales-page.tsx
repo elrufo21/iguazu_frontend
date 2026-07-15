@@ -322,7 +322,7 @@ export function SalesPage() {
   };
 
   return (
-    <section className={`space-y-5 ${hasSaleItems ? "pb-24 lg:pb-0" : ""}`}>
+    <section className={`flex min-h-0 flex-col space-y-5 lg:h-[calc(100dvh-8rem)] lg:overflow-hidden ${hasSaleItems ? "pb-24 lg:pb-0" : ""}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">
@@ -337,10 +337,10 @@ export function SalesPage() {
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
         {/* Lado izquierdo: Tabs de Contenido */}
-        <div className="order-2 space-y-4 lg:order-1">
-          <Tabs defaultValue="products" className="w-full">
+        <div className="order-2 min-h-0 space-y-4 lg:order-1">
+          <Tabs defaultValue="products" className="flex h-full min-h-0 w-full flex-col">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="products" className="flex items-center gap-2">
                 <Box className="h-4 w-4" /> Productos
@@ -354,7 +354,7 @@ export function SalesPage() {
             </TabsList>
 
             {/* TAB: PRODUCTOS */}
-            <TabsContent value="products" className="space-y-4 pt-4">
+            <TabsContent value="products" className="min-h-0 flex-1 space-y-4 pt-4 lg:flex lg:flex-col">
               <Card>
                 <CardContent className="p-4">
                   <div className="relative">
@@ -369,7 +369,7 @@ export function SalesPage() {
                 </CardContent>
               </Card>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 overflow-y-auto pr-1 sm:grid-cols-2 lg:min-h-0 lg:flex-1 lg:grid-cols-3">
                 {filteredProducts.map((product) => (
                   <button
                     key={String(product.id)}
@@ -599,9 +599,9 @@ export function SalesPage() {
         {/* Lado derecho: Carrito de Compras (Pegajoso) */}
         <div
           ref={saleSummaryRef}
-          className="order-1 lg:sticky lg:top-20 lg:order-2 lg:self-start"
+          className="order-1 min-h-0 lg:order-2 lg:self-stretch"
         >
-          <Card className="shadow-md border-primary/10">
+          <Card className="border-primary/10 shadow-md lg:flex lg:h-full lg:flex-col">
               <CardHeader className="pb-4 border-b border-border/50 bg-muted/20">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -613,7 +613,7 @@ export function SalesPage() {
                   </span>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-5 pt-5">
+              <CardContent className="space-y-4 pt-5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden">
                 <CashShiftSelect value={cashShiftId} onChange={setCashShiftId} />
 
                 {/* Cargos pendientes de BD */}
@@ -647,7 +647,7 @@ export function SalesPage() {
                 )}
 
                 {/* Ítems nuevos del carrito */}
-                <div className="space-y-3 min-h-[80px] max-h-[260px] overflow-y-auto pr-1">
+                <div className="min-h-[80px] max-h-[300px] space-y-2 overflow-y-auto pr-1 lg:min-h-0">
                   {cart.length === 0 && pendingSales.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full space-y-2 text-muted-foreground p-6">
                       <ShoppingCart className="w-8 h-8 opacity-20" />
@@ -665,7 +665,7 @@ export function SalesPage() {
                     cart.map((item) => (
                       <div
                         key={item.key}
-                        className="group rounded-lg border border-border/60 bg-card p-3 shadow-sm transition-all hover:border-primary/40"
+                        className="group rounded-lg border border-border/60 bg-card p-2.5 shadow-sm transition-all hover:border-primary/40"
                       >
                         <div className="flex justify-between items-start gap-3">
                           <div className="flex-1 min-w-0">
@@ -680,11 +680,11 @@ export function SalesPage() {
                             {money(item.quantity * item.unitPrice)}
                           </span>
                         </div>
-                        <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-end gap-3">
-                          <div className="flex items-center rounded-md border border-border">
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="flex h-8 shrink-0 items-center rounded-md border border-border">
                             <button
                               type="button"
-                              className="px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                              className="grid h-8 w-8 place-items-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                               onClick={() => updateQuantity(item.key, -1)}
                             >
                               <Minus className="h-3 w-3" />
@@ -694,16 +694,16 @@ export function SalesPage() {
                             </span>
                             <button
                               type="button"
-                              className="px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                              className="grid h-8 w-8 place-items-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                               onClick={() => updateQuantity(item.key, 1)}
                             >
                               <Plus className="h-3 w-3" />
                             </button>
                           </div>
-                          <div className="min-w-0">
-                            <Label className="text-xs">Precio</Label>
+                          <div className="min-w-0 flex-1">
                             <Input
-                              className="mt-1 h-8"
+                              aria-label={`Precio de ${item.description}`}
+                              className="h-8"
                               min="0"
                               step="0.01"
                               type="number"
@@ -719,7 +719,7 @@ export function SalesPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                            className="h-8 w-8 shrink-0 text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
                             onClick={() =>
                               setCart((items) =>
                                 items.filter((row) => row.key !== item.key),
@@ -735,7 +735,7 @@ export function SalesPage() {
                 </div>
 
                 {/* Opciones de Cobro */}
-                <div className="space-y-4 border-t border-border pt-4">
+                <div className="space-y-3 border-t border-border pt-4">
                   <Select
                     label="Asignar Cliente (Opcional)"
                     value={customerId}

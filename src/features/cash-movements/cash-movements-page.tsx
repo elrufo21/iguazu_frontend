@@ -35,16 +35,30 @@ const cashMovementConfig = modules.cashMovements;
 export function CashMovementsPage() {
   const [open, setOpen] = useState(false);
   const [cashShiftId, setCashShiftId] = useState('');
+  const [openedDate, setOpenedDate] = useState('');
   const [search, setSearch] = useState('');
   const queryClient = useQueryClient();
 
   const movementsQuery = useQuery({
-    queryKey: ['cash-movements'],
-    queryFn: () => resourceApi.list('cash-movements'),
+    queryKey: ['cash-movements', cashShiftId],
+    queryFn: () => resourceApi.list(`cash-movements/by-shift/${cashShiftId}`),
+    enabled: Boolean(cashShiftId),
+  });
+  const cashShiftsQuery = useQuery({
+    queryKey: ['cash-shifts', 'history', openedDate],
+    queryFn: () => resourceApi.list(`cash-shift/history?openedDate=${openedDate}`),
+    enabled: Boolean(openedDate),
   });
 
   const movements = useMemo(() => normalizeRows(movementsQuery.data), [movementsQuery.data]);
-  const cashShifts = useMemo(() => uniqueBy(movements.map((movement) => movement.cashShift as AnyRow | undefined).filter(Boolean) as AnyRow[], 'id'), [movements]);
+  const cashShifts = useMemo(() => normalizeRows(cashShiftsQuery.data), [cashShiftsQuery.data]);
+  const visibleCashShifts = useMemo(
+    () =>
+      cashShifts.filter(
+        (shift) => !openedDate || dateInputValue(new Date(String(shift.openedAt ?? ''))) === openedDate,
+      ),
+    [cashShifts, openedDate],
+  );
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -64,11 +78,10 @@ export function CashMovementsPage() {
         .toLowerCase();
 
       return (
-        (!cashShiftId || String(movement.cashShiftId) === cashShiftId) &&
         (!term || haystack.includes(term))
       );
     });
-  }, [movements, cashShiftId, search]);
+  }, [movements, search]);
 
   const totals = useMemo(() => {
     const income = filtered
@@ -111,14 +124,22 @@ export function CashMovementsPage() {
       </div>
 
       <Card>
-        <CardContent className="grid gap-3 md:grid-cols-[1fr_360px]">
+        <CardContent className="grid gap-3 md:grid-cols-[1fr_160px_420px]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input className="pl-9" placeholder="Buscar producto, cliente, usuario..." value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
+          <Input
+            type="date"
+            value={openedDate}
+            onChange={(event) => {
+              setOpenedDate(event.target.value);
+              setCashShiftId('');
+            }}
+          />
           <Select value={cashShiftId} onChange={(event) => setCashShiftId(event.target.value)}>
-            <option value="">Todas las cajas</option>
-            {cashShifts.map((shift) => (
+            <option value="">Selecciona una caja</option>
+            {visibleCashShifts.map((shift) => (
               <option key={String(shift.id)} value={String(shift.id)}>
                 Caja #{String(shift.id)} - {employeeName(shift.openedBy as AnyRow | undefined)} - {dateTime(shift.openedAt)} - {shiftLabel(cashShiftWorkShift({ cashShift: shift }))}
               </option>
@@ -127,7 +148,11 @@ export function CashMovementsPage() {
         </CardContent>
       </Card>
 
-      {movementsQuery.isLoading ? (
+      {!cashShiftId ? (
+        <div className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+          Selecciona una fecha y luego una caja para ver sus movimientos.
+        </div>
+      ) : movementsQuery.isLoading ? (
         <p className="py-8 text-center text-sm text-muted-foreground">Cargando movimientos...</p>
       ) : movementsQuery.isError ? (
         <Card>
@@ -274,6 +299,15 @@ function cashShiftOpenedAt(movement: AnyRow) {
   return new Date(String(value ?? ''));
 }
 
+function dateInputValue(date: Date) {
+  if (!Number.isFinite(date.getTime())) return '';
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
 function shiftLabel(shift: string) {
   return shift === 'DAY' ? 'Turno día' : 'Turno noche';
 }
@@ -288,14 +322,4 @@ function relatedEmployee(movement: AnyRow) {
     getValue(movement, 'staffAdvance.employee.fullName') ??
     getValue(movement, 'staffDiscount.employee.fullName')
   );
-}
-
-function uniqueBy(rows: AnyRow[], key: string) {
-  const seen = new Set<string>();
-  return rows.filter((row) => {
-    const value = String(row[key] ?? '');
-    if (!value || seen.has(value)) return false;
-    seen.add(value);
-    return true;
-  });
 }

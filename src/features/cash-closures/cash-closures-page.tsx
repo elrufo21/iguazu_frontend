@@ -30,6 +30,7 @@ export function CashClosuresPage() {
   const [correctionClosure, setCorrectionClosure] = useState<AnyRow | null>(null);
   const [correctionCounted, setCorrectionCounted] = useState<Record<string, string>>({});
   const [correctionReason, setCorrectionReason] = useState('');
+  const [openedDate, setOpenedDate] = useState('');
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const canCorrectClosures = user?.role === 'ADMIN';
@@ -40,14 +41,23 @@ export function CashClosuresPage() {
     retry: false,
   });
   const closures = useQuery({
-    queryKey: ['cash-closures'],
-    queryFn: () => resourceApi.list('cash-closures'),
+    queryKey: ['cash-closures', openedDate],
+    queryFn: () => resourceApi.list(openedDate ? `cash-closures?openedDate=${openedDate}` : 'cash-closures'),
   });
 
   const expectedByMethod = (preview.data?.expectedByMethod ?? {}) as Record<string, number>;
   const countedTotal = methods.reduce((sum, method) => sum + Number(counted[method.value] || 0), 0);
   const expectedTotal = Number(preview.data?.totalExpected ?? 0);
   const difference = Number((countedTotal - expectedTotal).toFixed(2));
+  const visibleClosures = useMemo(
+    () =>
+      normalizeRows(closures.data).filter(
+        (closure) =>
+          !openedDate ||
+          dateInputValue(new Date(String((closure.summary as AnyRow | undefined)?.openedAt ?? ''))) === openedDate,
+      ),
+    [closures.data, openedDate],
+  );
 
   const close = useMutation({
     mutationFn: () =>
@@ -84,6 +94,18 @@ export function CashClosuresPage() {
       setCorrectionCounted({});
       setCorrectionReason('');
       void queryClient.invalidateQueries({ queryKey: ['cash-closures'] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const reviewSaleEdit = useMutation({
+    mutationFn: ({ closureId, auditLogId, action }: { closureId: number; auditLogId: number; action: 'penalty' | 'loss' }) =>
+      resourceApi.post(`cash-closures/${closureId}/sale-edits/${auditLogId}/${action}`, {}),
+    onSuccess: (_data, variables) => {
+      toast.success(variables.action === 'penalty' ? 'Penalidad creada' : 'Edición aceptada');
+      void queryClient.invalidateQueries({ queryKey: ['cash-closures'] });
+      void queryClient.invalidateQueries({ queryKey: ['penalties'] });
+      void queryClient.invalidateQueries({ queryKey: ['reports'] });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
@@ -175,16 +197,27 @@ export function CashClosuresPage() {
       </Card>
 
       <div className="grid gap-3">
-        <h2 className="text-lg font-semibold">Historial de cierres</h2>
-        {normalizeRows(closures.data).map((closure) => (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <h2 className="text-lg font-semibold">Historial de cierres</h2>
+          <div className="w-full sm:w-48">
+            <Label>Fecha de apertura</Label>
+            <Input type="date" value={openedDate} onChange={(event) => setOpenedDate(event.target.value)} />
+          </div>
+        </div>
+        {visibleClosures.map((closure) => (
           <ClosureCard
             key={String(closure.id)}
             closure={closure}
             canCorrect={canCorrectClosures && !closure.settled}
             onCorrect={() => openCorrection(closure)}
+            canReviewEdits={canCorrectClosures}
+            reviewingEditId={Number(reviewSaleEdit.variables?.auditLogId ?? 0)}
+            onReviewEdit={(auditLogId, action) =>
+              reviewSaleEdit.mutate({ closureId: Number(closure.id), auditLogId, action })
+            }
           />
         ))}
-        {!closures.isLoading && normalizeRows(closures.data).length === 0 && (
+        {!closures.isLoading && visibleClosures.length === 0 && (
           <Card className="grid min-h-32 place-items-center p-6 text-sm text-muted-foreground">No hay cierres registrados.</Card>
         )}
       </div>
@@ -237,16 +270,23 @@ function ClosureCard({
   closure,
   canCorrect,
   onCorrect,
+  canReviewEdits,
+  reviewingEditId,
+  onReviewEdit,
 }: {
   closure: AnyRow;
   canCorrect: boolean;
   onCorrect: () => void;
+  canReviewEdits: boolean;
+  reviewingEditId: number;
+  onReviewEdit: (auditLogId: number, action: 'penalty' | 'loss') => void;
 }) {
   const details = normalizeRows(closure.details);
   const difference = Number(closure.difference ?? 0);
   const summary = closure.summary as AnyRow | undefined;
   const notes = String(closure.notes ?? '').trim();
   const settleReason = String(closure.settleReason ?? '').trim();
+  const saleEditsAfterClose = normalizeRows(closure.saleEditsAfterClose);
 
   return (
     <Card>
@@ -255,6 +295,9 @@ function ClosureCard({
           <div>
             <p className="font-semibold">Cierre #{String(closure.id)}</p>
             <p className="text-sm text-muted-foreground">{dateTime(closure.createdAt)}</p>
+            <p className="text-xs text-muted-foreground">
+              Apertura: {dateTime(summary?.openedAt)} · {shiftLabel(summary?.openedAt)}
+            </p>
           </div>
           <Badge tone={difference === 0 ? 'green' : difference < 0 ? 'red' : 'amber'}>
             {difference === 0 ? 'Cuadrada' : difference < 0 ? `Faltó ${money(Math.abs(difference))}` : `Sobró ${money(difference)}`}
@@ -285,6 +328,26 @@ function ClosureCard({
           </div>
         )}
 
+        {saleEditsAfterClose.length > 0 && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
+              <AlertTriangle className="h-4 w-4" />
+              Ediciones después del cierre
+            </p>
+            <div className="mt-3 space-y-2">
+              {saleEditsAfterClose.map((edit) => (
+                <SaleEditAfterClose
+                  key={String(edit.id)}
+                  edit={edit}
+                  canReview={canReviewEdits}
+                  busy={reviewingEditId === Number(edit.id)}
+                  onReview={onReviewEdit}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-2 md:grid-cols-5">
           {details.map((detail) => (
             <div key={String(detail.id)} className="rounded-md bg-muted p-2 text-xs">
@@ -310,6 +373,74 @@ function ClosureCard({
       </CardContent>
     </Card>
   );
+}
+
+function SaleEditAfterClose({
+  edit,
+  canReview,
+  busy,
+  onReview,
+}: {
+  edit: AnyRow;
+  canReview: boolean;
+  busy: boolean;
+  onReview: (auditLogId: number, action: 'penalty' | 'loss') => void;
+}) {
+  const oldData = (edit.oldData ?? {}) as AnyRow;
+  const newData = (edit.newData ?? {}) as AnyRow;
+  const reason = String(newData.reason ?? oldData.reason ?? '-');
+  const review = (edit.review ?? null) as AnyRow | null;
+  const amount = Math.max(0, Number(oldData.total ?? 0) - Number(newData.total ?? 0));
+  return (
+    <div className="rounded-md bg-white/80 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-semibold">Venta #{String(edit.saleId)}</p>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {review ? (
+            <Badge tone={review.action === 'SALE_EDIT_PENALTY' ? 'red' : 'amber'}>
+              {review.action === 'SALE_EDIT_PENALTY' ? 'Descontado' : 'Edición aceptada'}
+            </Badge>
+          ) : null}
+          <span>{dateTime(edit.createdAt)} · {String(edit.user ?? 'Sistema')}</span>
+        </div>
+      </div>
+      <p className="mt-1">
+        Total: <b>{money(Number(oldData.total ?? 0))}</b> → <b>{money(Number(newData.total ?? 0))}</b>
+      </p>
+      <p className="mt-1 text-xs">Motivo: {reason}</p>
+      <p className="mt-1 text-xs">{saleEditDetails(newData.details)}</p>
+      {canReview && !review && amount > 0 && (
+        <div className="mt-3 flex flex-wrap justify-end gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => onReview(Number(edit.id), 'loss')}
+          >
+            Aceptar edición
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={busy}
+            onClick={() => onReview(Number(edit.id), 'penalty')}
+          >
+            Descontar {money(amount)}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function saleEditDetails(details: unknown) {
+  const rows = Array.isArray(details) ? details : [];
+  if (!rows.length) return 'Sin detalle de productos.';
+  return rows
+    .map((detail: AnyRow) =>
+      `${Number(detail.quantity ?? 0)} x ${String(detail.description ?? 'Detalle')} (${money(Number(detail.subtotal ?? 0))})`,
+    )
+    .join(', ');
 }
 
 function CorrectCountsDialog({
@@ -413,4 +544,19 @@ function Mini({ label, value }: { label: string; value: string }) {
       <p className="font-semibold">{value}</p>
     </div>
   );
+}
+
+function shiftLabel(openedAt: unknown) {
+  const date = new Date(String(openedAt ?? ''));
+  const hour = Number.isFinite(date.getTime()) ? date.getHours() : 0;
+  return hour >= 15 || hour < 6 ? 'Turno noche' : 'Turno día';
+}
+
+function dateInputValue(date: Date) {
+  if (!Number.isFinite(date.getTime())) return '';
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
 }

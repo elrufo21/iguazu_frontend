@@ -179,6 +179,8 @@ const PERM_META: Record<string, PermMeta> = {
   'POST /cash-closures/:id/reopen': { label: 'Reabrir caja (solo ADMIN)', group: 'Cierres de caja', icon: CreditCard },
   'PATCH /cash-closures/:id/counts': { label: 'Corregir conteo de cierre (solo ADMIN)', group: 'Cierres de caja', icon: CreditCard },
   'POST /cash-closures/:id/settle': { label: 'Cuadrar diferencia', group: 'Cierres de caja', icon: CreditCard },
+  'POST /cash-closures/:id/sale-edits/:auditLogId/penalty': { label: 'Descontar edición post cierre', group: 'Cierres de caja', icon: CreditCard },
+  'POST /cash-closures/:id/sale-edits/:auditLogId/loss': { label: 'Aceptar edición post cierre', group: 'Cierres de caja', icon: CreditCard },
 
   // Comprobantes / Facturación
   'POST /billing/issue-from-sale/:saleId': { label: 'Emitir comprobante', group: 'Comprobantes', icon: FileText },
