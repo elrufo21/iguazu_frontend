@@ -597,12 +597,13 @@ export const modules: Record<string, ResourceConfig> = {
       },
       {
         name: "cashShiftId",
-        label: "Caja abierta",
+        label: "Caja",
         type: "relation",
-        endpoint: "cash-shift/open/all",
+        endpoint: "cash-shift/history",
         labelKey: "openedBy.employee.fullName",
         optional: true,
         adminOnly: true,
+        helper: "Solo se usa si registras un adelanto.",
       },
       { name: "notes", label: "Notas", type: "textarea" },
     ],
@@ -690,11 +691,30 @@ export const modules: Record<string, ResourceConfig> = {
         type: "datetime-local",
       },
       {
+        name: "retroactiveCheckIn",
+        label: "Check-in retroactivo",
+        type: "checkbox",
+        placeholder: "Usar caja cerrada",
+        optional: true,
+        adminOnly: true,
+        helper:
+          "Solo para registrar una habitación olvidada en una caja ya cerrada.",
+      },
+      {
         name: "cashShiftId",
-        label: "Caja abierta",
+        label: "Caja del turno",
         type: "relation",
-        endpoint: "cash-shift/open/all",
+        endpoint: "cash-shift/history",
         labelKey: "openedBy.employee.fullName",
+        optional: true,
+        adminOnly: true,
+        helper:
+          "Normal: caja abierta. Retroactivo: marca la opción anterior, elige la caja cerrada y escribe el motivo.",
+      },
+      {
+        name: "retroactiveReason",
+        label: "Motivo retroactivo",
+        type: "textarea",
         optional: true,
         adminOnly: true,
       },
@@ -705,8 +725,30 @@ export const modules: Record<string, ResourceConfig> = {
       priceTypeId: num,
       agreedPrice: optNum,
       expectedCheckOut: opt,
+      retroactiveCheckIn: bool,
       cashShiftId: optNum,
+      retroactiveReason: opt,
     }),
+    toPayload: (values) => {
+      const retroactive = Boolean(values.retroactiveCheckIn);
+      const reason = String(values.retroactiveReason ?? "").trim();
+      if (retroactive && !values.cashShiftId) throw new Error("Selecciona la caja cerrada.");
+      if (retroactive && !reason) throw new Error("Ingresa el motivo retroactivo.");
+
+      return {
+        ...(values.customerId ? { customerId: Number(values.customerId) } : {}),
+        roomId: Number(values.roomId),
+        priceTypeId: Number(values.priceTypeId),
+        ...(values.agreedPrice !== "" && values.agreedPrice !== undefined
+          ? { agreedPrice: Number(values.agreedPrice) }
+          : {}),
+        ...(values.expectedCheckOut
+          ? { expectedCheckOut: new Date(String(values.expectedCheckOut)).toISOString() }
+          : {}),
+        ...(values.cashShiftId ? { cashShiftId: Number(values.cashShiftId) } : {}),
+        ...(retroactive ? { retroactiveReason: reason } : {}),
+      };
+    },
     columns: [
       { header: "Habitación", accessor: "room.roomNumber" },
       { header: "Cliente", accessor: "customer.fullName" },

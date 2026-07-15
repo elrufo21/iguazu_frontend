@@ -98,6 +98,7 @@ const PERM_META: Record<string, PermMeta> = {
 
   // Ventas
   'POST /sales': { label: 'Crear venta', group: 'Ventas', icon: Receipt },
+  'POST /sales/retroactive': { label: 'Registrar venta en caja cerrada', group: 'Ventas', icon: Receipt },
   'POST /sales/:id/pay': { label: 'Cobrar venta pendiente', group: 'Ventas', icon: Receipt },
   'POST /sales/:id/cancel': { label: 'Anular venta', group: 'Ventas', icon: Receipt },
   'PATCH /sales/:id': { label: 'Editar venta pendiente', group: 'Ventas', icon: Receipt },

@@ -26,7 +26,8 @@ import {
 } from "../../components/ui/tabs";
 import { resourceApi } from "../../lib/api";
 import { errorMessage } from "../../lib/api-error";
-import { getValue, money, productTitle } from "../../lib/utils";
+import { dateTime, getValue, money, productTitle } from "../../lib/utils";
+import { useAuthStore } from "../../store/auth.store";
 import type { AnyRow } from "../../types";
 import { normalizeRows } from "../shared/resource-save";
 
@@ -54,6 +55,8 @@ export function SalesPage() {
   const [customerId, setCustomerId] = useState("");
   const [stayId, setStayId] = useState(searchParams.get("stayId") || "");
   const [cashShiftId, setCashShiftId] = useState("");
+  const [retroactive, setRetroactive] = useState(false);
+  const [retroactiveReason, setRetroactiveReason] = useState("");
 
   // New states for invoice
   const [invoiceType, setInvoiceType] = useState("TICKET");
@@ -69,6 +72,8 @@ export function SalesPage() {
   const prevStayIdRef = useRef("");
   const saleSummaryRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const isAdmin = user?.role === "ADMIN";
 
   const productsQuery = useQuery({
     queryKey: ["products"],
@@ -86,6 +91,11 @@ export function SalesPage() {
     queryKey: ["sales"],
     queryFn: () => resourceApi.list("sales"),
   });
+  const cashShiftsQuery = useQuery({
+    queryKey: ["cash-shift", "history", "retroactive-sales"],
+    queryFn: () => resourceApi.list("cash-shift/history"),
+    enabled: isAdmin && retroactive,
+  });
 
   const products = normalizeRows(productsQuery.data).filter(
     (product) => product.active !== false,
@@ -93,6 +103,9 @@ export function SalesPage() {
   const customers = normalizeRows(customersQuery.data);
   const stays = normalizeRows(staysQuery.data);
   const sales = normalizeRows(salesQuery.data);
+  const closedCashShifts = normalizeRows(cashShiftsQuery.data).filter(
+    (shift) => shift.status === "CLOSED",
+  );
   const selectedStay = stays.find((stay) => String(stay.id) === stayId);
   const selectedRoomId = Number(getValue(selectedStay ?? {}, "room.id") ?? 0);
   const lodgingRegistered = useMemo(
@@ -185,9 +198,16 @@ export function SalesPage() {
     mutationFn: async ({ chargeToStay }: { chargeToStay: boolean }) => {
       if (!cart.length && !pendingSales.length)
         throw new Error("Agrega al menos un producto o cargo.");
+      if (retroactive) {
+        if (!cashShiftId) throw new Error("Selecciona la caja cerrada.");
+        if (!retroactiveReason.trim()) throw new Error("Ingresa el motivo.");
+        if (chargeToStay || pendingSales.length) {
+          throw new Error("El registro retroactivo debe cobrarse en una sola venta.");
+        }
+      }
 
       // 1. Primero, cobrar los cargos pendientes existentes en BD
-      for (const pendingSale of pendingSales) {
+      for (const pendingSale of retroactive ? [] : pendingSales) {
         await resourceApi.post(`sales/${pendingSale.id}/pay`, {
           ...(cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
           payments: [{ paymentMethod, amount: Number(pendingSale.total ?? 0) }],
@@ -197,8 +217,9 @@ export function SalesPage() {
       // 2. Luego, si hay ítems nuevos en el carrito, crear la nueva venta
       if (cart.length === 0) return null;
       const amount = Number(total.toFixed(2));
-      return resourceApi.create("sales", {
+      return resourceApi.create(retroactive ? "sales/retroactive" : "sales", {
         ...(cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
+        ...(retroactive ? { reason: retroactiveReason.trim() } : {}),
         ...(customerId ? { customerId: Number(customerId) } : {}),
         ...(stayId ? { stayId: Number(stayId) } : {}),
         invoiceType,
@@ -229,6 +250,8 @@ export function SalesPage() {
       prevStayIdRef.current = "";
       setInvoiceNumber("");
       setCashShiftId("");
+      setRetroactive(false);
+      setRetroactiveReason("");
       void queryClient.invalidateQueries();
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -614,7 +637,48 @@ export function SalesPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4 pt-5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden">
-                <CashShiftSelect value={cashShiftId} onChange={setCashShiftId} />
+                {isAdmin && (
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      checked={retroactive}
+                      onChange={(event) => {
+                        setRetroactive(event.target.checked);
+                        setCashShiftId("");
+                      }}
+                    />
+                    Registrar en caja cerrada
+                  </label>
+                )}
+                {retroactive ? (
+                  <div className="space-y-3">
+                    <Select
+                      label="Caja cerrada"
+                      value={cashShiftId}
+                      onChange={(event) => setCashShiftId(event.target.value)}
+                    >
+                      <option value="">Seleccionar caja...</option>
+                      {closedCashShifts.map((shift) => (
+                        <option key={String(shift.id)} value={String(shift.id)}>
+                          Caja #{String(shift.id)} -{" "}
+                          {String(
+                            getValue(shift, "openedBy.employee.fullName") ??
+                              getValue(shift, "openedBy.username") ??
+                              "usuario",
+                          )}{" "}
+                          - {dateTime(shift.openedAt)}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input
+                      placeholder="Motivo del registro retroactivo"
+                      value={retroactiveReason}
+                      onChange={(event) => setRetroactiveReason(event.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <CashShiftSelect value={cashShiftId} onChange={setCashShiftId} />
+                )}
 
                 {/* Cargos pendientes de BD */}
                 {pendingSales.length > 0 && (
@@ -795,6 +859,7 @@ export function SalesPage() {
                       className="h-12 w-full text-base font-semibold shadow-md"
                       disabled={
                         (!cart.length && !pendingSales.length) ||
+                        (retroactive && (!cashShiftId || !retroactiveReason.trim())) ||
                         createSale.isPending
                       }
                       onClick={() => createSale.mutate({ chargeToStay: false })}
@@ -806,7 +871,7 @@ export function SalesPage() {
                     <Button
                       className="h-11 w-full"
                       variant="outline"
-                      disabled={!cart.length || !stayId || createSale.isPending}
+                      disabled={!cart.length || !stayId || retroactive || createSale.isPending}
                       onClick={() => createSale.mutate({ chargeToStay: true })}
                     >
                       Dejar pendiente en Hab.{" "}

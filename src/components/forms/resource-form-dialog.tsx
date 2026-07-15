@@ -7,7 +7,7 @@ import {
 } from "react-hook-form";
 import type { z } from "zod";
 import { resourceApi } from "../../lib/api";
-import { getValue } from "../../lib/utils";
+import { dateTime, getValue } from "../../lib/utils";
 import { useAuthStore } from "../../store/auth.store";
 import type { AnyRow } from "../../types";
 import { Button } from "../ui/button";
@@ -198,7 +198,7 @@ function FieldInput({
             {...form.register(field.name)}
             onChange={handleCheckboxChange}
           />
-          Sí
+          {field.placeholder ?? "Activar"}
         </label>
       ) : (
         <Input
@@ -417,7 +417,13 @@ function RelationSelect({
       </option>
       {rows.map((row) => (
         <option key={String(row.id)} value={String(row.id)}>
-          {String(getValue(row, field.labelKey ?? "name") ?? `#${row.id}`)}
+          {field.endpoint === "cash-shift/history"
+            ? `Caja #${String(row.id)} - ${String(
+                getValue(row, "openedBy.employee.fullName") ??
+                  getValue(row, "openedBy.username") ??
+                  "usuario",
+              )} - ${dateTime(row.openedAt)} - ${row.status === "CLOSED" ? "Cerrada" : "Abierta"}`
+            : String(getValue(row, field.labelKey ?? "name") ?? `#${row.id}`)}
         </option>
       ))}
     </Select>
