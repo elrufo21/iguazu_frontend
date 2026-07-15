@@ -9,14 +9,14 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   const setUser = useAuthStore((state) => state.setUser);
 
   const me = useQuery({
-    queryKey: ['auth', 'me'],
+    queryKey: ['auth', 'me', token],
     queryFn: authApi.me,
     enabled: Boolean(token),
   });
 
   useEffect(() => {
-    if (me.data) setUser(me.data);
-  }, [me.data, setUser]);
+    if (token && me.data) setUser(me.data);
+  }, [me.data, setUser, token]);
 
   if (!token) return <Navigate to="/login" replace />;
 

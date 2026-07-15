@@ -20,6 +20,7 @@ import { mobileNavItems, navGroups, navItems } from "./nav";
 import { useAuthStore } from "../../store/auth.store";
 import { cn } from "../../lib/utils";
 import { hasPermission } from "../../lib/permissions";
+import { queryClient } from "../../lib/query-client";
 
 export function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -67,6 +68,7 @@ export function AppLayout() {
   }, [mobileOpen]);
 
   const doLogout = () => {
+    queryClient.clear();
     logout();
     navigate("/login", { replace: true });
   };

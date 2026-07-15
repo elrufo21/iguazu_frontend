@@ -11,6 +11,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { authApi } from '../../lib/api';
 import { errorMessage } from '../../lib/api-error';
+import { queryClient } from '../../lib/query-client';
 import { useAuthStore } from '../../store/auth.store';
 
 const schema = z.object({
@@ -28,6 +29,7 @@ export function LoginPage() {
   const login = useMutation({
     mutationFn: authApi.login,
     onSuccess: (data) => {
+      queryClient.clear();
       setSession(data.accessToken, data.user);
       toast.success('Bienvenido a Iguazú');
       navigate('/dashboard', { replace: true });

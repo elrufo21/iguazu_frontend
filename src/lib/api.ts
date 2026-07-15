@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/auth.store';
 import type { LoginResponse, User } from '../types';
+import { queryClient } from './query-client';
 
 const baseURL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
@@ -15,7 +16,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) useAuthStore.getState().logout();
+    if (error.response?.status === 401) {
+      queryClient.clear();
+      useAuthStore.getState().logout();
+    }
     return Promise.reject(error);
   },
 );
