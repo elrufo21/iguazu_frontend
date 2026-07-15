@@ -12,6 +12,8 @@ const tones: Record<string, 'green' | 'amber' | 'red' | 'blue' | 'slate'> = {
   RESERVED: 'blue',
   OUT_OF_SERVICE: 'amber',
   PENDING: 'amber',
+  APPROVED: 'green',
+  REJECTED: 'red',
   CONFIRMED: 'blue',
   CANCELLED: 'red',
   COMPLETED: 'green',

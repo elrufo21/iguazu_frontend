@@ -214,6 +214,19 @@ function CashSummaryReport({ data }: { data: AnyRow }) {
         }}
       />
 
+      <SectionTitle>Movimientos de caja</SectionTitle>
+      <SimpleTable
+        rows={normalizeRows(data.movements)}
+        columns={['cashShiftId', 'type', 'category', 'paymentMethod', 'amount', 'user', 'customer', 'room', 'details', 'occurredAt']}
+        moneyCols={['amount']}
+        dateCols={['occurredAt']}
+        emptyMessage="Sin movimientos en el periodo."
+        renderCol={(col, value) => {
+          if (col === 'type' || col === 'category' || col === 'paymentMethod') return <Badge tone="slate">{valueLabel(value)}</Badge>;
+          return undefined;
+        }}
+      />
+
       <SettleDialog
         closure={settleClosure}
         reason={reason}
@@ -356,6 +369,20 @@ function SalesFullReport({ data }: { data: AnyRow }) {
         dateCols={['cancelledAt']}
         emptyMessage="Sin anulaciones en el periodo."
       />
+
+      <SectionTitle>Detalle de ventas</SectionTitle>
+      <SimpleTable
+        rows={normalizeRows(data.sales)}
+        columns={['id', 'status', 'customer', 'room', 'user', 'paymentMethod', 'total', 'details', 'createdAt']}
+        moneyCols={['total']}
+        dateCols={['createdAt']}
+        emptyMessage="Sin ventas en el periodo."
+        renderCol={(col, value) => {
+          if (col === 'status') return <Badge tone="slate">{valueLabel(value)}</Badge>;
+          if (col === 'paymentMethod') return String(value).split(' + ').map((item) => valueLabel(item)).join(' + ');
+          return undefined;
+        }}
+      />
     </div>
   );
 }
@@ -443,6 +470,9 @@ function ProductSalesByUserReport({ data }: { data: AnyRow }) {
   const columns: AppColumn[] = [
     { header: 'Producto', accessor: 'product' },
     { header: 'Usuario', accessor: 'user' },
+    { header: 'Caja', accessor: 'cashShift' },
+    { header: 'Apertura', accessor: 'cashOpenedAt', render: (v) => dateTime(v) },
+    { header: 'Turno', accessor: 'workShift', render: (v) => <Badge tone="blue">{String(v ?? '-')}</Badge> },
     { header: 'Cantidad', accessor: 'quantity' },
     { header: 'Total', accessor: 'total', render: (v) => money(Number(v ?? 0)) },
   ];
@@ -763,11 +793,13 @@ function buildExportSections(report: ReportKey, data: AnyRow): ExportSection[] {
   switch (report) {
     case 'cash-summary':
       sections.push({ title: 'Cierres', rows: normalizeRows(data.closures) });
+      sections.push({ title: 'Movimientos de caja', rows: normalizeRows(data.movements) });
       break;
     case 'sales-full':
       sections.push({ title: 'Ingresos por tipo de habitación', rows: normalizeRows(data.incomeByRoomType) });
       sections.push({ title: 'Por tipo de ítem', rows: normalizeRows(data.byItemType) });
       sections.push({ title: 'Anulaciones', rows: normalizeRows(data.cancellations) });
+      sections.push({ title: 'Detalle de ventas', rows: normalizeRows(data.sales) });
       break;
     case 'occupancy':
       sections.push({ title: 'Por tipo de habitación', rows: objectRows(data.byRoomType) });

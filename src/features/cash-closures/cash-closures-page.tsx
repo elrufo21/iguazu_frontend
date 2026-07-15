@@ -245,6 +245,8 @@ function ClosureCard({
   const details = normalizeRows(closure.details);
   const difference = Number(closure.difference ?? 0);
   const summary = closure.summary as AnyRow | undefined;
+  const notes = String(closure.notes ?? '').trim();
+  const settleReason = String(closure.settleReason ?? '').trim();
 
   return (
     <Card>
@@ -269,6 +271,20 @@ function ClosureCard({
           <Mini label="Pérdidas" value={`${summary?.lossCount ?? 0} / ${money(Number(summary?.lossTotal ?? 0))}`} />
         </div>
 
+        {notes && (
+          <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Descripción</p>
+            <p className="mt-1 whitespace-pre-wrap">{notes}</p>
+          </div>
+        )}
+
+        {settleReason && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            <p className="text-xs font-medium uppercase tracking-wide">Motivo de cuadre</p>
+            <p className="mt-1 whitespace-pre-wrap">{settleReason}</p>
+          </div>
+        )}
+
         <div className="grid gap-2 md:grid-cols-5">
           {details.map((detail) => (
             <div key={String(detail.id)} className="rounded-md bg-muted p-2 text-xs">
@@ -283,7 +299,7 @@ function ClosureCard({
           ))}
         </div>
 
-        {canCorrect && (
+        {canCorrect && difference !== 0 && (
           <div className="flex justify-end">
             <Button variant="outline" size="sm" onClick={onCorrect}>
               <Pencil className="h-4 w-4" />

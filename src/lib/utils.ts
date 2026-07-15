@@ -39,6 +39,8 @@ export const valueLabels: Record<string, string> = {
   RESERVED: 'Reservada',
   OUT_OF_SERVICE: 'Fuera de servicio',
   PENDING: 'Pendiente',
+  APPROVED: 'Aprobada',
+  REJECTED: 'Rechazada',
   CONFIRMED: 'Confirmada',
   CANCELLED: 'Cancelada',
   COMPLETED: 'Completada',

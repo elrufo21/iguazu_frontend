@@ -323,8 +323,14 @@ export function SalesHistoryPage() {
   const [editSale, setEditSale] = useState<AnyRow | null>(null);
   const [editReason, setEditReason] = useState('');
   const [editDetails, setEditDetails] = useState<EditDetail[]>([]);
+  const [editPaymentMethod, setEditPaymentMethod] = useState('');
+  const [editUserId, setEditUserId] = useState('');
+  const [editCashShiftId, setEditCashShiftId] = useState('');
+  const [editCustomerId, setEditCustomerId] = useState('');
+  const [editStayId, setEditStayId] = useState('');
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const isAdmin = user?.role === 'ADMIN';
 
   const salesQuery = useQuery({
     queryKey: ['sales'],
@@ -333,6 +339,25 @@ export function SalesHistoryPage() {
   const productsQuery = useQuery({
     queryKey: ['products'],
     queryFn: () => resourceApi.list('products'),
+  });
+  const usersQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: () => resourceApi.list('users'),
+    enabled: isAdmin,
+  });
+  const customersQuery = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => resourceApi.list('customers'),
+  });
+  const staysQuery = useQuery({
+    queryKey: ['stays', 'history'],
+    queryFn: () => resourceApi.list('stays/history'),
+    enabled: isAdmin,
+  });
+  const cashShiftsQuery = useQuery({
+    queryKey: ['cash-shifts', 'history'],
+    queryFn: () => resourceApi.list('cash-shift/history'),
+    enabled: isAdmin,
   });
 
   const paySale = useMutation({
@@ -387,6 +412,11 @@ export function SalesHistoryPage() {
     mutationFn: () =>
       resourceApi.update(`sales/${editSale?.id}`, {
         reason: editReason.trim(),
+        ...(editPaymentMethod ? { paymentMethod: editPaymentMethod } : {}),
+        ...(isAdmin && editUserId ? { userId: Number(editUserId) } : {}),
+        ...(isAdmin && editCashShiftId ? { cashShiftId: Number(editCashShiftId) } : {}),
+        ...(editCustomerId ? { customerId: Number(editCustomerId) } : {}),
+        ...(isAdmin && editStayId ? { stayId: Number(editStayId) } : {}),
         details: editDetails.map((detail) => ({
           ...(detail.id ? { id: detail.id } : {}),
           ...(detail.productId ? { productId: detail.productId } : {}),
@@ -399,14 +429,26 @@ export function SalesHistoryPage() {
       setEditSale(null);
       setEditReason('');
       setEditDetails([]);
+      setEditPaymentMethod('');
+      setEditUserId('');
+      setEditCashShiftId('');
+      setEditCustomerId('');
+      setEditStayId('');
       void queryClient.invalidateQueries({ queryKey: ['sales'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
+      void queryClient.invalidateQueries({ queryKey: ['cash-closures'] });
+      void queryClient.invalidateQueries({ queryKey: ['cash-movements'] });
+      void queryClient.invalidateQueries({ queryKey: ['reports'] });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
 
   const sales = normalizeRows(salesQuery.data);
   const products = normalizeRows(productsQuery.data).filter((product) => product.active !== false);
+  const users = normalizeRows(usersQuery.data).filter((item) => item.active !== false);
+  const customers = normalizeRows(customersQuery.data);
+  const stays = normalizeRows(staysQuery.data);
+  const cashShifts = normalizeRows(cashShiftsQuery.data);
 
   const filtered = useMemo(() => {
     let list = [...sales];
@@ -518,6 +560,11 @@ export function SalesHistoryPage() {
               onEdit={(s) => {
                 setEditSale(s);
                 setEditReason('');
+                setEditPaymentMethod(String(getValue(s, 'payments.0.paymentMethod') ?? ''));
+                setEditUserId(String(s.userId ?? ''));
+                setEditCashShiftId(String(s.cashShiftId ?? ''));
+                setEditCustomerId(String(s.customerId ?? ''));
+                setEditStayId(String(s.stayId ?? ''));
                 setEditDetails(
                   ((s.details as AnyRow[] | undefined) ?? []).map((detail) => ({
                     id: Number(detail.id),
@@ -597,8 +644,23 @@ export function SalesHistoryPage() {
         reason={editReason}
         details={editDetails}
         products={products}
+        users={users}
+        customers={customers}
+        stays={stays}
+        cashShifts={cashShifts}
+        paymentMethod={editPaymentMethod}
+        userId={editUserId}
+        cashShiftId={editCashShiftId}
+        customerId={editCustomerId}
+        stayId={editStayId}
+        isAdmin={isAdmin}
         onReasonChange={setEditReason}
         onDetailsChange={setEditDetails}
+        onPaymentMethodChange={setEditPaymentMethod}
+        onUserIdChange={setEditUserId}
+        onCashShiftIdChange={setEditCashShiftId}
+        onCustomerIdChange={setEditCustomerId}
+        onStayIdChange={setEditStayId}
         onOpenChange={(open) => {
           if (!open) setEditSale(null);
         }}
@@ -624,8 +686,23 @@ function EditSaleDialog({
   reason,
   details,
   products,
+  users,
+  customers,
+  stays,
+  cashShifts,
+  paymentMethod,
+  userId,
+  cashShiftId,
+  customerId,
+  stayId,
+  isAdmin,
   onReasonChange,
   onDetailsChange,
+  onPaymentMethodChange,
+  onUserIdChange,
+  onCashShiftIdChange,
+  onCustomerIdChange,
+  onStayIdChange,
   onOpenChange,
   onConfirm,
   pending,
@@ -634,8 +711,23 @@ function EditSaleDialog({
   reason: string;
   details: EditDetail[];
   products: AnyRow[];
+  users: AnyRow[];
+  customers: AnyRow[];
+  stays: AnyRow[];
+  cashShifts: AnyRow[];
+  paymentMethod: string;
+  userId: string;
+  cashShiftId: string;
+  customerId: string;
+  stayId: string;
+  isAdmin: boolean;
   onReasonChange: (value: string) => void;
   onDetailsChange: (value: EditDetail[]) => void;
+  onPaymentMethodChange: (value: string) => void;
+  onUserIdChange: (value: string) => void;
+  onCashShiftIdChange: (value: string) => void;
+  onCustomerIdChange: (value: string) => void;
+  onStayIdChange: (value: string) => void;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   pending: boolean;
@@ -674,8 +766,68 @@ function EditSaleDialog({
       <DialogContent className="w-[min(620px,calc(100vw-2rem))] p-5">
         <DialogTitle className="text-lg font-semibold">Editar venta #{String(sale.id)}</DialogTitle>
         <DialogDescription className="mt-2 text-sm text-muted-foreground">
-          Agrega o quita productos y ajusta cantidad/precio. La descripción viene del producto.
+          Corrige productos, precios, método de pago y datos asociados.
         </DialogDescription>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Método de pago</Label>
+            <Select value={paymentMethod} onChange={(event) => onPaymentMethodChange(event.target.value)}>
+              <option value="">Sin cambio</option>
+              {Object.entries(PAYMENT_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Cliente</Label>
+            <Select value={customerId} onChange={(event) => onCustomerIdChange(event.target.value)}>
+              <option value="">Sin cambio</option>
+              {customers.map((customer) => (
+                <option key={String(customer.id)} value={String(customer.id)}>
+                  {String(customer.fullName ?? customer.documentNumber ?? customer.id)}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {isAdmin && (
+            <>
+              <div className="space-y-2">
+                <Label>Usuario responsable</Label>
+                <Select value={userId} onChange={(event) => onUserIdChange(event.target.value)}>
+                  <option value="">Sin cambio</option>
+                  {users.map((item) => (
+                    <option key={String(item.id)} value={String(item.id)}>
+                      {String(getValue(item, 'employee.fullName') ?? item.username ?? item.id)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Caja</Label>
+                <Select value={cashShiftId} onChange={(event) => onCashShiftIdChange(event.target.value)}>
+                  <option value="">Sin cambio</option>
+                  {cashShifts.map((shift) => (
+                    <option key={String(shift.id)} value={String(shift.id)}>
+                      {cashShiftLabel(shift)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Habitación / estadía</Label>
+                <Select value={stayId} onChange={(event) => onStayIdChange(event.target.value)}>
+                  <option value="">Sin cambio</option>
+                  {stays.map((stay) => (
+                    <option key={String(stay.id)} value={String(stay.id)}>
+                      Hab. {String(getValue(stay, 'room.roomNumber') ?? stay.id)} - {String(getValue(stay, 'customer.fullName') ?? 'sin cliente')} - {dateTime(stay.checkIn)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </>
+          )}
+        </div>
 
         <div className="mt-4 space-y-3">
           {details.map((detail) => {
@@ -841,6 +993,16 @@ function CancelSaleDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function cashShiftLabel(shift: AnyRow) {
+  return `Caja #${String(shift.id)} - ${String(getValue(shift, 'openedBy.employee.fullName') ?? getValue(shift, 'openedBy.username') ?? '-')} - ${dateTime(shift.openedAt)} - ${shiftLabel(shift.openedAt)}`;
+}
+
+function shiftLabel(openedAt: unknown) {
+  const date = new Date(String(openedAt ?? ''));
+  const hour = Number.isFinite(date.getTime()) ? date.getHours() : 0;
+  return hour >= 15 || hour < 6 ? 'Turno noche' : 'Turno día';
 }
 
 function IssueInvoiceDialog({
