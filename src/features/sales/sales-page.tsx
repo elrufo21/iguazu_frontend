@@ -67,6 +67,7 @@ export function SalesPage() {
   // Cargos pendientes que ya están en BD (a pagar junto con la venta nueva)
   const [pendingSales, setPendingSales] = useState<AnyRow[]>([]);
   const prevStayIdRef = useRef("");
+  const saleSummaryRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
   const productsQuery = useQuery({
@@ -173,6 +174,12 @@ export function SalesPage() {
     (sum, item) => sum + item.quantity * item.unitPrice,
     0,
   );
+  const pendingTotal = pendingSales.reduce(
+    (sum, s) => sum + Number(s.total ?? 0),
+    0,
+  );
+  const grandTotal = total + pendingTotal;
+  const hasSaleItems = cart.length > 0 || pendingSales.length > 0;
 
   const createSale = useMutation({
     mutationFn: async ({ chargeToStay }: { chargeToStay: boolean }) => {
@@ -206,7 +213,7 @@ export function SalesPage() {
           // Marcar productos del frigobar como source ROOM
           ...(item.key.startsWith("frigobar-") ? { source: "ROOM" } : {}),
         })),
-        ...(chargeToStay ? {} : { payments: [{ paymentMethod, amount }] }),
+        ...(chargeToStay || amount === 0 ? {} : { payments: [{ paymentMethod, amount }] }),
       });
     },
     onSuccess: (_data, variables) => {
@@ -300,10 +307,9 @@ export function SalesPage() {
       items
         .map((item) =>
           item.key === key
-            ? { ...item, quantity: Math.max(1, item.quantity + diff) }
+            ? { ...item, quantity: Math.max(0, item.quantity + diff) }
             : item,
         )
-        .filter((item) => item.quantity > 0),
     );
   };
 
@@ -316,7 +322,7 @@ export function SalesPage() {
   };
 
   return (
-    <section className="space-y-5">
+    <section className={`space-y-5 ${hasSaleItems ? "pb-24 lg:pb-0" : ""}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">
@@ -331,9 +337,9 @@ export function SalesPage() {
         </Button>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
         {/* Lado izquierdo: Tabs de Contenido */}
-        <div className="space-y-4">
+        <div className="order-2 space-y-4 lg:order-1">
           <Tabs defaultValue="products" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="products" className="flex items-center gap-2">
@@ -591,15 +597,11 @@ export function SalesPage() {
         </div>
 
         {/* Lado derecho: Carrito de Compras (Pegajoso) */}
-        {(() => {
-          const pendingTotal = pendingSales.reduce(
-            (sum, s) => sum + Number(s.total ?? 0),
-            0,
-          );
-          const grandTotal = total + pendingTotal;
-
-          return (
-            <Card className="xl:sticky xl:top-20 xl:self-start shadow-md border-primary/10">
+        <div
+          ref={saleSummaryRef}
+          className="order-1 lg:sticky lg:top-20 lg:order-2 lg:self-start"
+        >
+          <Card className="shadow-md border-primary/10">
               <CardHeader className="pb-4 border-b border-border/50 bg-muted/20">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -815,10 +817,35 @@ export function SalesPage() {
                   </div>
                 </div>
               </CardContent>
-            </Card>
-          );
-        })()}
+          </Card>
+        </div>
       </div>
+
+      {hasSaleItems && (
+        <div className="fixed inset-x-3 bottom-16 z-40 rounded-lg border border-border bg-card p-3 shadow-xl md:bottom-4 lg:hidden">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted-foreground">Carrito</p>
+              <p className="truncate text-lg font-bold text-primary">
+                {money(grandTotal)}
+              </p>
+            </div>
+            <Button
+              type="button"
+              className="h-11"
+              onClick={() =>
+                saleSummaryRef.current?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                })
+              }
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Ver carrito
+            </Button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

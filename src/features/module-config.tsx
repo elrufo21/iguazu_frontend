@@ -233,6 +233,7 @@ export const modules: Record<string, ResourceConfig> = {
     createPath: "price-types",
     updatePath: id("price-types"),
     togglePath: (row) => `price-types/${row.id}/toggle-active`,
+    includeInactiveToggle: true,
     createLabel: "Nuevo tipo",
     fields: [
       { name: "name", label: "Nombre" },
@@ -257,6 +258,7 @@ export const modules: Record<string, ResourceConfig> = {
     createPath: "room-types",
     updatePath: id("room-types"),
     togglePath: (row) => `room-types/${row.id}/toggle-active`,
+    includeInactiveToggle: true,
     createLabel: "Nuevo tipo",
     fields: [
       { name: "name", label: "Nombre" },
@@ -281,6 +283,7 @@ export const modules: Record<string, ResourceConfig> = {
     createPath: "room-type-prices",
     updatePath: id("room-type-prices"),
     togglePath: (row) => `room-type-prices/${row.id}/toggle-active`,
+    includeInactiveToggle: true,
     createLabel: "Nueva tarifa",
     fields: [
       {
@@ -319,6 +322,7 @@ export const modules: Record<string, ResourceConfig> = {
     createPath: "rooms",
     updatePath: id("rooms"),
     togglePath: (row) => `rooms/${row.id}/toggle-active`,
+    includeInactiveToggle: true,
     createLabel: "Nueva habitación",
     fields: [
       { name: "roomNumber", label: "Número" },
@@ -407,6 +411,7 @@ export const modules: Record<string, ResourceConfig> = {
     createPath: "products",
     updatePath: id("products"),
     togglePath: (row) => `products/${row.id}/toggle-active`,
+    includeInactiveToggle: true,
     createLabel: "Nuevo producto",
     fields: [
       { name: "name", label: "Nombre" },

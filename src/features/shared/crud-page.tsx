@@ -45,6 +45,7 @@ export type ResourceConfig = {
   toPayload?: (values: FormValues, editing?: AnyRow | null) => unknown;
   toFormValues?: (row: AnyRow | null) => AnyRow | null;
   actions?: ResourceAction[];
+  includeInactiveToggle?: boolean;
   requiresCustomer?: boolean;
   exportRows?: {
     fileName: string;
@@ -61,11 +62,16 @@ export function CrudPage({ config }: { config: ResourceConfig }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AnyRow | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; description: string; run: () => void } | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
   const queryClient = useQueryClient();
+  const listPath =
+    config.includeInactiveToggle && showInactive
+      ? withQuery(config.listPath, 'includeInactive=true')
+      : config.listPath;
 
   const list = useQuery({
-    queryKey: [config.key, config.listPath],
-    queryFn: () => resourceApi.list(config.listPath),
+    queryKey: [config.key, listPath],
+    queryFn: () => resourceApi.list(listPath),
   });
 
   const rows = useMemo(() => normalizeRows(list.data), [list.data]);
@@ -186,6 +192,12 @@ export function CrudPage({ config }: { config: ResourceConfig }) {
           <p className="mt-1 text-sm text-muted-foreground">{config.description}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {config.includeInactiveToggle && (
+            <Button variant={showInactive ? 'secondary' : 'outline'} onClick={() => setShowInactive((value) => !value)}>
+              <Power className="h-4 w-4" />
+              {showInactive ? 'Ocultar desactivados' : 'Mostrar desactivados'}
+            </Button>
+          )}
           {config.exportRows && (
             <>
               <Button variant="outline" disabled={rows.length === 0} onClick={() => void downloadRowsPdf(config.title, exportData, config.exportRows!.fileName)}>
@@ -243,6 +255,10 @@ export function CrudPage({ config }: { config: ResourceConfig }) {
       />
     </section>
   );
+}
+
+function withQuery(path: string, query: string) {
+  return `${path}${path.includes('?') ? '&' : '?'}${query}`;
 }
 
 function exportValue(value: unknown, type?: 'money' | 'date' | 'status') {

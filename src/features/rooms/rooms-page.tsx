@@ -45,10 +45,11 @@ export function RoomsPage() {
   const [productsRoom, setProductsRoom] = useState<Room | null>(null);
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [productSearch, setProductSearch] = useState('');
+  const [showInactive, setShowInactive] = useState(false);
 
   const roomsQuery = useQuery({
-    queryKey: ['resource', 'rooms'],
-    queryFn: () => resourceApi.list('rooms'),
+    queryKey: ['resource', 'rooms', showInactive],
+    queryFn: () => resourceApi.list(showInactive ? 'rooms?includeInactive=true' : 'rooms'),
   });
   const productsQuery = useQuery({
     queryKey: ['resource', 'products'],
@@ -126,10 +127,16 @@ export function RoomsPage() {
           <h1 className="text-2xl font-semibold text-foreground">Habitaciones</h1>
           <p className="text-sm text-muted-foreground">Estado, tipo y productos asignados a cada habitación.</p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4" />
-          Nueva habitación
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant={showInactive ? 'secondary' : 'outline'} onClick={() => setShowInactive((value) => !value)}>
+            <Power className="h-4 w-4" />
+            {showInactive ? 'Ocultar desactivadas' : 'Mostrar desactivadas'}
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4" />
+            Nueva habitación
+          </Button>
+        </div>
       </div>
 
       {roomsQuery.isLoading ? (
@@ -167,7 +174,10 @@ export function RoomsPage() {
                       {room.floor ? ` · Piso ${room.floor}` : ''}
                     </p>
                   </div>
-                  <StatusBadge value={room.status} />
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <StatusBadge value={room.status} />
+                    <StatusBadge value={room.active} />
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="rounded-md bg-muted p-3">
@@ -199,7 +209,7 @@ export function RoomsPage() {
                       }}
                     >
                       <Power className="h-4 w-4" />
-                      Desactivar
+                      {room.active === false ? 'Activar' : 'Desactivar'}
                     </Button>
                   </div>
                 </CardContent>

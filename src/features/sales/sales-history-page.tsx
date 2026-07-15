@@ -693,7 +693,7 @@ function EditSaleDialog({
                     <Label>Cantidad</Label>
                     <Input
                       disabled={!isProduct}
-                      min="1"
+                      min="0"
                       step="1"
                       type="number"
                       value={String(detail.quantity)}
@@ -701,7 +701,7 @@ function EditSaleDialog({
                         onDetailsChange(
                           details.map((item) =>
                             item === detail
-                              ? { ...item, quantity: Math.max(1, Number(event.target.value || 1)) }
+                              ? { ...item, quantity: Math.max(0, Number(event.target.value || 0)) }
                               : item,
                           ),
                         )
