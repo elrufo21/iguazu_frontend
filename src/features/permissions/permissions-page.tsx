@@ -190,6 +190,8 @@ const PERM_META: Record<string, PermMeta> = {
   'GET /billing': { label: 'Ver comprobantes', group: 'Comprobantes', icon: FileText },
   'GET /billing/:id': { label: 'Ver comprobante', group: 'Comprobantes', icon: FileText },
   'GET /billing/:id/pdf': { label: 'Descargar PDF', group: 'Comprobantes', icon: FileText },
+  'GET /billing/:id/xml': { label: 'Descargar XML', group: 'Comprobantes', icon: FileText },
+  'GET /billing/:id/cdr': { label: 'Descargar CDR', group: 'Comprobantes', icon: FileText },
 
   // Personal - Adelantos
   'POST /staff-advances': { label: 'Solicitar adelanto', group: 'Adelantos', icon: Banknote },

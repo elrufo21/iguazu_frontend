@@ -38,4 +38,15 @@ export const resourceApi = {
     payload === undefined ? api.patch(path).then((res) => res.data) : api.patch(path, payload).then((res) => res.data),
   post: (path: string, payload?: unknown) =>
     payload === undefined ? api.post(path).then((res) => res.data) : api.post(path, payload).then((res) => res.data),
+  download: async (path: string, fallbackName: string) => {
+    const res = await api.get(path, { responseType: 'blob' });
+    const disposition = String(res.headers['content-disposition'] ?? '');
+    const fileName = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName;
+    const url = URL.createObjectURL(res.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
 };

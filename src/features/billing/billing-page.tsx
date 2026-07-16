@@ -90,6 +90,17 @@ export function BillingPage() {
     onError: (error) => toast.error(errorMessage(error)),
   });
 
+  const downloadFile = async (invoice: AnyRow, kind: 'xml' | 'cdr') => {
+    try {
+      await resourceApi.download(
+        `billing/${invoice.id}/${kind}`,
+        `${kind === 'cdr' ? 'R-' : ''}${String(invoice.docNumber ?? 'comprobante')}.xml`,
+      );
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
+
   const invoices = normalizeRows(query.data);
 
   const filtered = useMemo(() => {
@@ -190,6 +201,8 @@ export function BillingPage() {
               key={String(invoice.id)}
               invoice={invoice}
               onViewPdf={(inv) => viewPdf.mutate(inv)}
+              onDownloadXml={(inv) => void downloadFile(inv, 'xml')}
+              onDownloadCdr={(inv) => void downloadFile(inv, 'cdr')}
               onCreditNote={(inv) => {
                 setCreditInvoice(inv);
                 setCreditReason('');
@@ -263,11 +276,15 @@ export function BillingPage() {
 function InvoiceCard({
   invoice,
   onViewPdf,
+  onDownloadXml,
+  onDownloadCdr,
   onCreditNote,
   isLoading,
 }: {
   invoice: AnyRow;
   onViewPdf: (invoice: AnyRow) => void;
+  onDownloadXml: (invoice: AnyRow) => void;
+  onDownloadCdr: (invoice: AnyRow) => void;
   onCreditNote: (invoice: AnyRow) => void;
   isLoading: boolean;
 }) {
@@ -326,6 +343,12 @@ function InvoiceCard({
         >
           <FileText className="h-4 w-4" />
           Ver PDF
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => onDownloadXml(invoice)}>
+          XML
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => onDownloadCdr(invoice)}>
+          CDR
         </Button>
       </div>
     </div>
