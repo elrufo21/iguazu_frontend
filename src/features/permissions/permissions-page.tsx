@@ -50,6 +50,7 @@ const PERM_META: Record<string, PermMeta> = {
   'GET /rooms/:id/products': { label: 'Ver minibar de habitación', group: 'Habitaciones', icon: BedDouble },
   'PATCH /rooms/:id': { label: 'Editar habitación', group: 'Habitaciones', icon: BedDouble },
   'PATCH /rooms/:id/products': { label: 'Asignar productos a habitación', group: 'Habitaciones', icon: BedDouble },
+  'PATCH /rooms/:id/clean': { label: 'Confirmar limpieza', group: 'Habitaciones', icon: BedDouble },
   'PATCH /rooms/:id/toggle-active': { label: 'Activar/desactivar habitación', group: 'Habitaciones', icon: BedDouble },
 
   // Tipos de habitación

@@ -77,6 +77,7 @@ type EditDetail = {
   description: string;
   quantity: number;
   unitPrice: number;
+  originalUnitPrice?: number;
 };
 
 function SaleCard({
@@ -573,6 +574,7 @@ export function SalesHistoryPage() {
                     description: String(detail.description ?? ''),
                     quantity: Number(detail.quantity ?? 1),
                     unitPrice: Number(detail.unitPrice ?? 0),
+                    originalUnitPrice: Number(detail.unitPrice ?? 0),
                   })),
                 );
               }}
@@ -735,6 +737,11 @@ function EditSaleDialog({
   const [productId, setProductId] = useState('');
   if (!sale) return null;
   const total = details.reduce((sum, detail) => sum + detail.quantity * detail.unitPrice, 0);
+  const totalDiscount = details.reduce(
+    (sum, detail) =>
+      sum + Math.max(0, Number(detail.originalUnitPrice ?? detail.unitPrice) - detail.unitPrice) * detail.quantity,
+    0,
+  );
   const addProduct = () => {
     const product = products.find((item) => String(item.id) === productId);
     if (!product) return;
@@ -755,6 +762,7 @@ function EditSaleDialog({
           description: productTitle(product),
           quantity: 1,
           unitPrice: Number(product.salePrice ?? 0),
+          originalUnitPrice: Number(product.salePrice ?? 0),
         },
       ]);
     }
@@ -832,6 +840,7 @@ function EditSaleDialog({
         <div className="mt-4 space-y-3">
           {details.map((detail) => {
             const isProduct = detail.itemType === 'PRODUCT';
+            const discount = Math.max(0, Number(detail.originalUnitPrice ?? detail.unitPrice) - detail.unitPrice) * detail.quantity;
             return (
               <div key={detail.id ?? `new-${detail.productId}`} className="rounded-md border border-border p-3">
                 <div className="grid gap-3 sm:grid-cols-[1fr_110px_130px_auto] sm:items-end">
@@ -888,9 +897,12 @@ function EditSaleDialog({
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Subtotal {money(detail.quantity * detail.unitPrice)}
-                </p>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span>Subtotal {money(detail.quantity * detail.unitPrice)}</span>
+                  {discount > 0 && (
+                    <span className="font-medium text-amber-700">Descuento {money(discount)}</span>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -921,7 +933,12 @@ function EditSaleDialog({
         </div>
 
         <div className="mt-5 flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold">Nuevo total: {money(total)}</span>
+          <div className="text-sm">
+            <p className="font-semibold">Nuevo total: {money(total)}</p>
+            {totalDiscount > 0 && (
+              <p className="text-xs font-medium text-amber-700">Descuento total: {money(totalDiscount)}</p>
+            )}
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
               Cancelar

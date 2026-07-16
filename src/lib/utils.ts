@@ -36,7 +36,7 @@ export const valueLabels: Record<string, string> = {
   CASHIER: 'Caja',
   AVAILABLE: 'Disponible',
   OCCUPIED: 'Ocupada',
-  RESERVED: 'Reservada',
+  RESERVED: 'Limpieza pendiente',
   OUT_OF_SERVICE: 'Fuera de servicio',
   PENDING: 'Pendiente',
   APPROVED: 'Aprobada',

@@ -9,7 +9,7 @@ const tones: Record<string, 'green' | 'amber' | 'red' | 'blue' | 'slate'> = {
   CASHIER: 'amber',
   AVAILABLE: 'green',
   OCCUPIED: 'red',
-  RESERVED: 'blue',
+  RESERVED: 'red',
   OUT_OF_SERVICE: 'amber',
   PENDING: 'amber',
   APPROVED: 'green',

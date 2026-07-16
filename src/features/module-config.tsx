@@ -35,7 +35,7 @@ const customerDocumentOptions = [
 ];
 const roomStatusOptions = [
   { label: "Disponible", value: "AVAILABLE" },
-  { label: "Reservada", value: "RESERVED" },
+  { label: "Limpieza pendiente", value: "RESERVED" },
   { label: "Fuera de servicio", value: "OUT_OF_SERVICE" },
 ];
 const paymentOptions = [

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   BedDouble,
+  CheckCircle2,
   Clock,
   LogOut,
   PackagePlus,
@@ -30,6 +31,8 @@ import { Label } from "../../components/ui/label";
 import { resourceApi } from "../../lib/api";
 import { errorMessage } from "../../lib/api-error";
 import { dateTime, getValue, money, productTitle } from "../../lib/utils";
+import { hasPermission } from "../../lib/permissions";
+import { useAuthStore } from "../../store/auth.store";
 import type { AnyRow } from "../../types";
 import { modules } from "../module-config";
 import { normalizeRows, saveResource } from "../shared/resource-save";
@@ -60,6 +63,7 @@ export function StaysPage() {
   const [chargeItems, setChargeItems] = useState<ChargeItem[]>([]);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
   const config = modules.stays;
   const checkInInitialValue = useMemo(
     () => (open ? { expectedCheckOut: tomorrowAtNoonInputValue() } : null),
@@ -143,6 +147,8 @@ export function StaysPage() {
   const availableRooms = rooms.filter(
     (room) => room.status === "AVAILABLE",
   ).length;
+  const cleaningRooms = rooms.filter((room) => room.status === "RESERVED");
+  const canMarkClean = hasPermission(user, "PATCH /rooms/:id/clean");
 
   const checkIn = useMutation({
     mutationFn: (values: Record<string, unknown>) =>
@@ -159,10 +165,19 @@ export function StaysPage() {
     mutationFn: ({ id, body }: { id: number; body: { amount: number; cashShiftId?: number; payments?: Array<{ paymentMethod: string; amount: number }> } }) =>
       resourceApi.update(`stays/${id}/check-out`, body),
     onSuccess: () => {
-      toast.success("Check-out realizado");
+      toast.success("Check-out realizado. Habitación pendiente de limpieza.");
       setCheckoutId(null);
       setPaymentMethod("CASH");
       setCashShiftId("");
+      void queryClient.invalidateQueries();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const markClean = useMutation({
+    mutationFn: (roomId: number) => resourceApi.update(`rooms/${roomId}/clean`),
+    onSuccess: () => {
+      toast.success("Limpieza confirmada");
       void queryClient.invalidateQueries();
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -260,13 +275,14 @@ export function StaysPage() {
         </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         <Metric label="Activas" value={stays.length} />
         <Metric label="Disponibles" value={availableRooms} />
         <Metric
           label="Ocupadas"
           value={rooms.filter((room) => room.status === "OCCUPIED").length}
         />
+        <Metric label="Limpieza" value={cleaningRooms.length} />
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -380,6 +396,42 @@ export function StaysPage() {
             </Card>
           );
         })}
+        {cleaningRooms.map((room) => (
+          <Card key={`clean-${String(room.id)}`} className="overflow-hidden border-red-200">
+            <CardHeader className="border-b border-red-800 bg-red-900 text-white">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <BedDouble className="h-5 w-5" />
+                  <span className="text-lg font-semibold">
+                    Hab. {String(room.roomNumber ?? "-")}
+                  </span>
+                </div>
+                <StatusBadge value={room.status} />
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4 p-4">
+              <div>
+                <p className="text-lg font-semibold text-red-800">
+                  Necesita limpieza
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Confirma cuando la habitación esté lista.
+                </p>
+              </div>
+              {canMarkClean && (
+                <Button
+                  className="h-11 w-full"
+                  variant="outline"
+                  disabled={markClean.isPending}
+                  onClick={() => markClean.mutate(Number(room.id))}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Confirmar limpieza
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {staysQuery.isError && (
@@ -387,7 +439,7 @@ export function StaysPage() {
           {errorMessage(staysQuery.error)}
         </Card>
       )}
-      {!staysQuery.isLoading && stays.length === 0 && (
+      {!staysQuery.isLoading && stays.length === 0 && cleaningRooms.length === 0 && (
         <Card className="grid min-h-40 place-items-center p-6 text-center text-sm text-muted-foreground">
           <div>
             <Clock className="mx-auto mb-2 h-6 w-6" />
@@ -411,7 +463,7 @@ export function StaysPage() {
       <ConfirmDialog
         open={checkoutId !== null && lodgingDue <= 0}
         title="Confirmar check-out"
-        description="El alojamiento ya está cobrado. La habitación volverá a estar disponible."
+        description="El alojamiento ya está cobrado. La habitación quedará pendiente de limpieza."
         onOpenChange={(value) => !value && setCheckoutId(null)}
         onConfirm={() =>
           checkoutId &&
