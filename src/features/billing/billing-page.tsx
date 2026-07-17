@@ -39,7 +39,7 @@ const STATUS_META: Record<string, { label: string; tone: 'green' | 'amber' | 're
   ACCEPTED: { label: 'Aceptado', tone: 'green', icon: <ShieldCheck className="h-3 w-3" /> },
   OBSERVED: { label: 'Observado', tone: 'amber', icon: <ShieldAlert className="h-3 w-3" /> },
   REJECTED: { label: 'Rechazado', tone: 'red', icon: <ShieldX className="h-3 w-3" /> },
-  PENDING: { label: 'Pendiente', tone: 'slate', icon: <ShieldAlert className="h-3 w-3" /> },
+  PENDING: { label: 'En SUNAT', tone: 'amber', icon: <ShieldAlert className="h-3 w-3" /> },
   CANCELED: { label: 'Anulado', tone: 'red', icon: <ShieldX className="h-3 w-3" /> },
 };
 
@@ -64,6 +64,12 @@ export function BillingPage() {
   const query = useQuery({
     queryKey: ['billing'],
     queryFn: () => resourceApi.list('billing'),
+    // Mientras haya boletas en proceso en SUNAT (Resumen Diario), refresca cada 5s
+    // para reflejar el resultado cuando el backend consulte el ticket.
+    refetchInterval: (q) => {
+      const rows = normalizeRows(q.state.data);
+      return rows.some((r) => String(r.status) === 'PENDING') ? 5000 : false;
+    },
   });
 
   const viewPdf = useMutation({
@@ -123,11 +129,13 @@ export function BillingPage() {
     const accepted = invoices.filter((i) => String(i.status) === 'ACCEPTED');
     const rejected = invoices.filter((i) => String(i.status) === 'REJECTED');
     const canceled = invoices.filter((i) => String(i.status) === 'CANCELED');
+    const pending = invoices.filter((i) => String(i.status) === 'PENDING');
     return {
       count: invoices.length,
       accepted: accepted.length,
       rejected: rejected.length,
       canceled: canceled.length,
+      pending: pending.length,
       total: accepted.reduce((sum, i) => sum + Number(i.total ?? 0), 0),
     };
   }, [invoices]);
@@ -142,10 +150,11 @@ export function BillingPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
           { label: 'Comprobantes', value: String(stats.count), icon: <Receipt className="h-5 w-5 text-primary" /> },
           { label: 'Aceptados', value: String(stats.accepted), icon: <ShieldCheck className="h-5 w-5 text-emerald-600" /> },
+          { label: 'En SUNAT', value: String(stats.pending), icon: <ShieldAlert className="h-5 w-5 text-amber-600" /> },
           { label: 'Rechazados', value: String(stats.rejected), icon: <ShieldX className="h-5 w-5 text-red-600" /> },
           { label: 'Facturado (aceptado)', value: money(stats.total), icon: <FileText className="h-5 w-5 text-violet-600" /> },
         ].map((stat) => (
@@ -180,6 +189,7 @@ export function BillingPage() {
               <option value="">Todos los estados</option>
               <option value="ACCEPTED">Aceptados</option>
               <option value="OBSERVED">Observados</option>
+              <option value="PENDING">En SUNAT</option>
               <option value="REJECTED">Rechazados</option>
               <option value="CANCELED">Anulados</option>
             </Select>
@@ -292,6 +302,8 @@ function InvoiceCard({
   const status = String(invoice.status ?? 'PENDING');
   const isCreditNote = type === '07';
   const canCancel = status === 'ACCEPTED' && !isCreditNote;
+  // Boleta en Resumen Diario: el CDR aún no está disponible hasta que SUNAT procese el ticket.
+  const isPending = status === 'PENDING';
 
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm p-4">
@@ -344,10 +356,22 @@ function InvoiceCard({
           <FileText className="h-4 w-4" />
           Ver PDF
         </Button>
-        <Button variant="outline" size="sm" onClick={() => onDownloadXml(invoice)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onDownloadXml(invoice)}
+          disabled={isPending}
+          title={isPending ? 'El XML estará disponible cuando SUNAT procese el resumen' : ''}
+        >
           XML
         </Button>
-        <Button variant="outline" size="sm" onClick={() => onDownloadCdr(invoice)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onDownloadCdr(invoice)}
+          disabled={isPending}
+          title={isPending ? 'El CDR aún no llegó de SUNAT (boleta en Resumen Diario)' : ''}
+        >
           CDR
         </Button>
       </div>

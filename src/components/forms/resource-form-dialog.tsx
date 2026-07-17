@@ -113,15 +113,16 @@ export function ResourceFormDialog({
               error={form.formState.errors[field.name]?.message}
             />
           ))}
-          <div className="flex justify-end gap-2 sm:col-span-2">
+          <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
+              className="w-full sm:w-auto"
               onClick={() => onOpenChange(false)}
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" className="w-full sm:w-auto" disabled={saving}>
               {saving ? "Guardando..." : "Guardar"}
             </Button>
           </div>
@@ -192,9 +193,10 @@ function FieldInput({
       ) : field.type === "customer" ? (
         <CustomerField id={id} field={field} form={form} />
       ) : field.type === "checkbox" ? (
-        <label className="flex h-10 items-center gap-2 rounded-md border border-border bg-white px-3 text-sm">
+        <label className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-white px-3 text-base md:text-sm">
           <input
             type="checkbox"
+            className="h-5 w-5 shrink-0"
             {...form.register(field.name)}
             onChange={handleCheckboxChange}
           />
@@ -292,7 +294,7 @@ function CustomerField({
                 <span>Clientes</span>
                 <button
                   type="button"
-                  className="font-medium text-primary"
+                  className="rounded px-2 py-1 font-medium text-primary"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => setFocused(false)}
                 >
@@ -300,11 +302,11 @@ function CustomerField({
                 </button>
               </div>
               {query.isLoading ? (
-                <p className="px-3 py-2 text-sm text-muted-foreground">
+                <p className="px-3 py-3 text-sm text-muted-foreground">
                   Cargando clientes...
                 </p>
               ) : query.isError ? (
-                <p className="px-3 py-2 text-sm text-red-700">
+                <p className="px-3 py-3 text-sm text-red-700">
                   No se pudieron cargar los clientes.
                 </p>
               ) : filteredOptions.length > 0 ? (
@@ -312,7 +314,7 @@ function CustomerField({
                   <button
                     key={option.id}
                     type="button"
-                    className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-muted"
+                    className="block w-full rounded px-3 py-3 text-left text-sm hover:bg-muted"
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => pick(option)}
                   >
@@ -320,7 +322,7 @@ function CustomerField({
                   </button>
                 ))
               ) : (
-                <p className="px-3 py-2 text-sm text-muted-foreground">
+                <p className="px-3 py-3 text-sm text-muted-foreground">
                   No hay clientes con ese texto.
                 </p>
               )}
@@ -331,6 +333,7 @@ function CustomerField({
           <Button
             type="button"
             variant={creating ? "secondary" : "outline"}
+            className="w-full sm:w-auto"
             onClick={() => {
               setCreating((value) => !value);
               form.setValue(field.name, "");

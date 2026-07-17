@@ -92,4 +92,10 @@ export const navGroups = [
   },
 ];
 
-export const mobileNavItems = navItems.slice(0, 5);
+// Accesos directos de la barra inferior móvil (orden = prioridad operativa del empleado).
+// Cada ítem reutiliza su definición de navItems (icono y permiso), así el filtro de permisos
+// del layout sigue ocultando los que el usuario no puede ver.
+const mobilePaths = ["/dashboard", "/stays", "/sales", "/cash-shifts", "/cash-closures"];
+export const mobileNavItems = mobilePaths
+  .map((path) => navItems.find((item) => item.path === path))
+  .filter((item): item is (typeof navItems)[number] => Boolean(item));

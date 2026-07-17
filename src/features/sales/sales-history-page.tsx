@@ -118,6 +118,8 @@ function SaleCard({
   const invoiceStatus = String(invoice?.status ?? '');
   // Comprobante aceptado/observado → bloqueado (no se puede reemitir).
   const invoiceAccepted = invoiceStatus === 'ACCEPTED' || invoiceStatus === 'OBSERVED';
+  // Comprobante pendiente de SUNAT (boleta en Resumen Diario) → bloqueado para evitar duplicados.
+  const invoicePending = invoiceStatus === 'PENDING';
   // Comprobante rechazado → se puede reintentar.
   const invoiceRejected = invoiceStatus === 'REJECTED';
   // Puede emitir si está pagada, con cliente, y (sin comprobante o con comprobante rechazado).
@@ -228,6 +230,12 @@ function SaleCard({
               <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
                 <FileText className="h-3 w-3" />
                 {SUNAT_TYPE_LABELS[String(invoice?.invoiceType ?? '03')] ?? 'Comprobante'} {String(invoice?.docNumber ?? '')}
+              </span>
+            )}
+            {invoicePending && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                <FileText className="h-3 w-3" />
+                {SUNAT_TYPE_LABELS[String(invoice?.invoiceType ?? '03')] ?? 'Boleta'} {String(invoice?.docNumber ?? '')} · en SUNAT…
               </span>
             )}
             {invoiceRejected && !canInvoice && (
@@ -382,6 +390,11 @@ export function SalesHistoryPage() {
         toast.success(`Comprobante ${res.docNumber} aceptado por SUNAT.`);
       } else if (res.status === 'OBSERVED') {
         toast.warning(`Comprobante ${res.docNumber} observado (código ${code}).`);
+      } else if (res.status === 'PENDING') {
+        // Boleta enviada en Resumen Diario (flujo asíncrono). SUNAT responde más tarde.
+        toast.info(
+          `Boleta ${res.docNumber} enviada a SUNAT (Resumen Diario). El estado se actualizará en unos minutos.`,
+        );
       } else {
         toast.error(`SUNAT rechazó el comprobante (código ${code}).`);
       }
@@ -478,7 +491,7 @@ export function SalesHistoryPage() {
 
   const canEditSale = (sale: AnyRow) =>
     String(sale.status) !== 'CANCELLED' &&
-    !['ACCEPTED', 'OBSERVED'].includes(String(getValue(sale, 'invoice.status') ?? '')) &&
+    !['ACCEPTED', 'OBSERVED', 'PENDING'].includes(String(getValue(sale, 'invoice.status') ?? '')) &&
     (user?.role === 'ADMIN' || Number(sale.userId) === Number(user?.id));
 
   return (

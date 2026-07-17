@@ -15,6 +15,11 @@ import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
 import { CashShiftSelect } from "../../components/cash-shift-select";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
@@ -64,13 +69,13 @@ export function SalesPage() {
 
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartOpen, setCartOpen] = useState(false);
   const [manualType, setManualType] = useState<"OTHER" | "PENALTY">("OTHER");
   const [manualDescription, setManualDescription] = useState("");
   const [manualPrice, setManualPrice] = useState("");
   // Cargos pendientes que ya están en BD (a pagar junto con la venta nueva)
   const [pendingSales, setPendingSales] = useState<AnyRow[]>([]);
   const prevStayIdRef = useRef("");
-  const saleSummaryRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === "ADMIN";
@@ -193,6 +198,7 @@ export function SalesPage() {
   );
   const grandTotal = total + pendingTotal;
   const hasSaleItems = cart.length > 0 || pendingSales.length > 0;
+  const cartCount = cart.length;
 
   const createSale = useMutation({
     mutationFn: async ({ chargeToStay }: { chargeToStay: boolean }) => {
@@ -344,8 +350,262 @@ export function SalesPage() {
     );
   };
 
+  // Cuerpo del carrito reutilizado: Card de escritorio y modal móvil consumen el mismo contenido.
+  const renderCart = () => (
+    <div className="space-y-4">
+      {isAdmin && (
+        <label className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-white px-3 text-base md:text-sm">
+          <input
+            type="checkbox"
+            className="h-5 w-5 shrink-0"
+            checked={retroactive}
+            onChange={(event) => {
+              setRetroactive(event.target.checked);
+              setCashShiftId("");
+            }}
+          />
+          Registrar en caja cerrada
+        </label>
+      )}
+      {retroactive ? (
+        <div className="space-y-3">
+          <Select
+            label="Caja cerrada"
+            value={cashShiftId}
+            onChange={(event) => setCashShiftId(event.target.value)}
+          >
+            <option value="">Seleccionar caja...</option>
+            {closedCashShifts.map((shift) => (
+              <option key={String(shift.id)} value={String(shift.id)}>
+                Caja #{String(shift.id)} -{" "}
+                {String(
+                  getValue(shift, "openedBy.employee.fullName") ??
+                    getValue(shift, "openedBy.username") ??
+                    "usuario",
+                )}{" "}
+                - {dateTime(shift.openedAt)}
+              </option>
+            ))}
+          </Select>
+          <Input
+            placeholder="Motivo del registro retroactivo"
+            value={retroactiveReason}
+            onChange={(event) => setRetroactiveReason(event.target.value)}
+          />
+        </div>
+      ) : (
+        <CashShiftSelect value={cashShiftId} onChange={setCashShiftId} />
+      )}
+
+      {/* Cargos pendientes de BD */}
+      {pendingSales.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50/70 p-3 dark:bg-amber-950/20 dark:border-amber-900/50">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-2">
+            Cargos previos pendientes
+          </p>
+          <div className="space-y-1.5">
+            {pendingSales.map((sale) =>
+              (sale.details as AnyRow[] | undefined)?.map((d) => (
+                <div
+                  key={String(d.id)}
+                  className="flex justify-between text-sm"
+                >
+                  <span className="text-muted-foreground truncate mr-2">
+                    {String(d.quantity)}x {String(d.description)}
+                  </span>
+                  <span className="font-medium whitespace-nowrap">
+                    {money(Number(d.subtotal ?? 0))}
+                  </span>
+                </div>
+              )),
+            )}
+          </div>
+          <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-900/50 flex justify-between text-sm font-semibold text-amber-800 dark:text-amber-300">
+            <span>Subtotal cargos previos</span>
+            <span>{money(pendingTotal)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Ítems nuevos del carrito */}
+      <div className="min-h-[80px] space-y-2 lg:max-h-[300px] lg:overflow-y-auto lg:pr-1">
+        {cart.length === 0 && pendingSales.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full space-y-2 text-muted-foreground p-6">
+            <ShoppingCart className="w-8 h-8 opacity-20" />
+            <p className="text-sm text-center">
+              Tu carrito está vacío.
+              <br />
+              Agrega productos o cargos.
+            </p>
+          </div>
+        ) : cart.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-2">
+            Solo cargos previos pendientes.
+          </p>
+        ) : (
+          cart.map((item) => (
+            <div
+              key={item.key}
+              className="group rounded-lg border border-border/60 bg-card p-2.5 shadow-sm transition-all hover:border-primary/40"
+            >
+              <div className="flex justify-between items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <p
+                    className="font-medium text-sm truncate"
+                    title={item.description}
+                  >
+                    {item.description}
+                  </p>
+                </div>
+                <span className="font-semibold text-sm whitespace-nowrap">
+                  {money(item.quantity * item.unitPrice)}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex h-10 shrink-0 items-center rounded-md border border-border md:h-8">
+                  <button
+                    type="button"
+                    aria-label={`Quitar uno de ${item.description}`}
+                    className="grid h-10 w-10 place-items-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:h-8 md:w-8"
+                    onClick={() => updateQuantity(item.key, -1)}
+                  >
+                    <Minus className="h-3 w-3" />
+                  </button>
+                  <span className="w-8 text-center text-sm font-medium">
+                    {item.quantity}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Agregar uno de ${item.description}`}
+                    className="grid h-10 w-10 place-items-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:h-8 md:w-8"
+                    onClick={() => updateQuantity(item.key, 1)}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <Input
+                    aria-label={`Precio de ${item.description}`}
+                    className="h-10 md:h-8"
+                    min="0"
+                    step="0.01"
+                    type="number"
+                    value={String(item.unitPrice)}
+                    onChange={(event) =>
+                      updateUnitPrice(
+                        item.key,
+                        Number(event.target.value || 0),
+                      )
+                    }
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Eliminar ${item.description}`}
+                  className="h-10 w-10 shrink-0 text-destructive/70 hover:bg-destructive/10 hover:text-destructive md:h-8 md:w-8"
+                  onClick={() =>
+                    setCart((items) =>
+                      items.filter((row) => row.key !== item.key),
+                    )
+                  }
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Opciones de Cobro */}
+      <div className="space-y-3 border-t border-border pt-4">
+        <Select
+          label="Asignar Cliente (Opcional)"
+          value={customerId}
+          onChange={(e) => setCustomerId(e.target.value)}
+        >
+          <option value="">Consumidor Final</option>
+          {customers.map((customer) => (
+            <option
+              key={String(customer.id)}
+              value={String(customer.id)}
+            >
+              {String(
+                customer.fullName ??
+                  customer.documentNumber ??
+                  customer.id,
+              )}
+            </option>
+          ))}
+        </Select>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Select
+            label="Comprobante"
+            value={invoiceType}
+            onChange={(e) => setInvoiceType(e.target.value)}
+          >
+            <option value="TICKET">Ticket (Interno)</option>
+            <option value="BOLETA">Boleta</option>
+            <option value="FACTURA">Factura</option>
+          </Select>
+          {invoiceType !== "TICKET" && (
+            <div className="space-y-2">
+              <Label>Nº (Opcional)</Label>
+              <Input
+                placeholder="Ej. B001-23"
+                value={invoiceNumber}
+                onChange={(e) => setInvoiceNumber(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+
+        <Select
+          label="Método de pago"
+          value={paymentMethod}
+          onChange={(e) => setPaymentMethod(e.target.value)}
+        >
+          {paymentOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+
+        <div className="space-y-2 pt-2">
+          <Button
+            className="h-12 w-full text-base font-semibold shadow-md"
+            disabled={
+              (!cart.length && !pendingSales.length) ||
+              (retroactive && (!cashShiftId || !retroactiveReason.trim())) ||
+              createSale.isPending
+            }
+            onClick={() => createSale.mutate({ chargeToStay: false })}
+          >
+            {createSale.isPending
+              ? "Procesando..."
+              : `Cobrar ${money(grandTotal)}`}
+          </Button>
+          <Button
+            className="h-11 w-full"
+            variant="outline"
+            disabled={!cart.length || !stayId || retroactive || createSale.isPending}
+            onClick={() => createSale.mutate({ chargeToStay: true })}
+          >
+            Dejar pendiente en Hab.{" "}
+            {selectedStay
+              ? String(getValue(selectedStay, "room.roomNumber") ?? "")
+              : ""}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <section className={`flex min-h-0 flex-col space-y-5 lg:h-[calc(100dvh-8rem)] lg:overflow-hidden ${hasSaleItems ? "pb-24 lg:pb-0" : ""}`}>
+    <section className={`flex min-h-0 flex-col space-y-5 lg:h-[calc(100dvh-8rem)] lg:overflow-hidden ${hasSaleItems ? "pb-28 lg:pb-0" : ""}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">
@@ -364,15 +624,18 @@ export function SalesPage() {
         {/* Lado izquierdo: Tabs de Contenido */}
         <div className="order-2 min-h-0 space-y-4 lg:order-1">
           <Tabs defaultValue="products" className="flex h-full min-h-0 w-full flex-col">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="products" className="flex items-center gap-2">
-                <Box className="h-4 w-4" /> Productos
+            <TabsList className="grid h-auto w-full grid-cols-3">
+              <TabsTrigger value="products" className="flex flex-col items-center gap-1 py-2 sm:flex-row">
+                <Box className="h-4 w-4" />
+                <span className="text-xs sm:text-sm">Productos</span>
               </TabsTrigger>
-              <TabsTrigger value="room" className="flex items-center gap-2">
-                <BedDouble className="h-4 w-4" /> Habitación
+              <TabsTrigger value="room" className="flex flex-col items-center gap-1 py-2 sm:flex-row">
+                <BedDouble className="h-4 w-4" />
+                <span className="text-xs sm:text-sm">Habitación</span>
               </TabsTrigger>
-              <TabsTrigger value="manual" className="flex items-center gap-2">
-                <PenTool className="h-4 w-4" /> Cargo Manual
+              <TabsTrigger value="manual" className="flex flex-col items-center gap-1 py-2 sm:flex-row">
+                <PenTool className="h-4 w-4" />
+                <span className="text-xs sm:text-sm">Cargo</span>
               </TabsTrigger>
             </TabsList>
 
@@ -619,298 +882,75 @@ export function SalesPage() {
           </Tabs>
         </div>
 
-        {/* Lado derecho: Carrito de Compras (Pegajoso) */}
-        <div
-          ref={saleSummaryRef}
-          className="order-1 min-h-0 lg:order-2 lg:self-stretch"
-        >
-          <Card className="border-primary/10 shadow-md lg:flex lg:h-full lg:flex-col">
-              <CardHeader className="pb-4 border-b border-border/50 bg-muted/20">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ShoppingCart className="h-5 w-5 text-primary" />
-                    <h2 className="text-lg font-semibold">Resumen de Venta</h2>
-                  </div>
-                  <span className="text-2xl font-bold text-primary">
-                    {money(grandTotal)}
-                  </span>
+        {/* Lado derecho: Carrito de Compras */}
+        {/* Escritorio: Card siempre visible (móvil usa el modal que abre el botón fijo) */}
+        <div className="order-1 min-h-0 lg:order-2 lg:self-stretch">
+          <Card className="hidden border-primary/10 shadow-md lg:flex lg:h-full lg:flex-col">
+            <CardHeader className="pb-4 border-b border-border/50 bg-muted/20">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold">Resumen de Venta</h2>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4 pt-5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden">
-                {isAdmin && (
-                  <label className="flex items-center gap-2 text-sm font-medium">
-                    <input
-                      type="checkbox"
-                      checked={retroactive}
-                      onChange={(event) => {
-                        setRetroactive(event.target.checked);
-                        setCashShiftId("");
-                      }}
-                    />
-                    Registrar en caja cerrada
-                  </label>
-                )}
-                {retroactive ? (
-                  <div className="space-y-3">
-                    <Select
-                      label="Caja cerrada"
-                      value={cashShiftId}
-                      onChange={(event) => setCashShiftId(event.target.value)}
-                    >
-                      <option value="">Seleccionar caja...</option>
-                      {closedCashShifts.map((shift) => (
-                        <option key={String(shift.id)} value={String(shift.id)}>
-                          Caja #{String(shift.id)} -{" "}
-                          {String(
-                            getValue(shift, "openedBy.employee.fullName") ??
-                              getValue(shift, "openedBy.username") ??
-                              "usuario",
-                          )}{" "}
-                          - {dateTime(shift.openedAt)}
-                        </option>
-                      ))}
-                    </Select>
-                    <Input
-                      placeholder="Motivo del registro retroactivo"
-                      value={retroactiveReason}
-                      onChange={(event) => setRetroactiveReason(event.target.value)}
-                    />
-                  </div>
-                ) : (
-                  <CashShiftSelect value={cashShiftId} onChange={setCashShiftId} />
-                )}
-
-                {/* Cargos pendientes de BD */}
-                {pendingSales.length > 0 && (
-                  <div className="rounded-lg border border-amber-300 bg-amber-50/70 p-3 dark:bg-amber-950/20 dark:border-amber-900/50">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-2">
-                      Cargos previos pendientes
-                    </p>
-                    <div className="space-y-1.5">
-                      {pendingSales.map((sale) =>
-                        (sale.details as AnyRow[] | undefined)?.map((d) => (
-                          <div
-                            key={String(d.id)}
-                            className="flex justify-between text-sm"
-                          >
-                            <span className="text-muted-foreground truncate mr-2">
-                              {String(d.quantity)}x {String(d.description)}
-                            </span>
-                            <span className="font-medium whitespace-nowrap">
-                              {money(Number(d.subtotal ?? 0))}
-                            </span>
-                          </div>
-                        )),
-                      )}
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-900/50 flex justify-between text-sm font-semibold text-amber-800 dark:text-amber-300">
-                      <span>Subtotal cargos previos</span>
-                      <span>{money(pendingTotal)}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Ítems nuevos del carrito */}
-                <div className="min-h-[80px] max-h-[300px] space-y-2 overflow-y-auto pr-1 lg:min-h-0">
-                  {cart.length === 0 && pendingSales.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full space-y-2 text-muted-foreground p-6">
-                      <ShoppingCart className="w-8 h-8 opacity-20" />
-                      <p className="text-sm text-center">
-                        Tu carrito está vacío.
-                        <br />
-                        Agrega productos o cargos.
-                      </p>
-                    </div>
-                  ) : cart.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-2">
-                      Solo cargos previos pendientes.
-                    </p>
-                  ) : (
-                    cart.map((item) => (
-                      <div
-                        key={item.key}
-                        className="group rounded-lg border border-border/60 bg-card p-2.5 shadow-sm transition-all hover:border-primary/40"
-                      >
-                        <div className="flex justify-between items-start gap-3">
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className="font-medium text-sm truncate"
-                              title={item.description}
-                            >
-                              {item.description}
-                            </p>
-                          </div>
-                          <span className="font-semibold text-sm whitespace-nowrap">
-                            {money(item.quantity * item.unitPrice)}
-                          </span>
-                        </div>
-                        <div className="mt-2 flex items-center gap-2">
-                          <div className="flex h-8 shrink-0 items-center rounded-md border border-border">
-                            <button
-                              type="button"
-                              className="grid h-8 w-8 place-items-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                              onClick={() => updateQuantity(item.key, -1)}
-                            >
-                              <Minus className="h-3 w-3" />
-                            </button>
-                            <span className="w-8 text-center text-sm font-medium">
-                              {item.quantity}
-                            </span>
-                            <button
-                              type="button"
-                              className="grid h-8 w-8 place-items-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                              onClick={() => updateQuantity(item.key, 1)}
-                            >
-                              <Plus className="h-3 w-3" />
-                            </button>
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <Input
-                              aria-label={`Precio de ${item.description}`}
-                              className="h-8"
-                              min="0"
-                              step="0.01"
-                              type="number"
-                              value={String(item.unitPrice)}
-                              onChange={(event) =>
-                                updateUnitPrice(
-                                  item.key,
-                                  Number(event.target.value || 0),
-                                )
-                              }
-                            />
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 shrink-0 text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() =>
-                              setCart((items) =>
-                                items.filter((row) => row.key !== item.key),
-                              )
-                            }
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Opciones de Cobro */}
-                <div className="space-y-3 border-t border-border pt-4">
-                  <Select
-                    label="Asignar Cliente (Opcional)"
-                    value={customerId}
-                    onChange={(e) => setCustomerId(e.target.value)}
-                  >
-                    <option value="">Consumidor Final</option>
-                    {customers.map((customer) => (
-                      <option
-                        key={String(customer.id)}
-                        value={String(customer.id)}
-                      >
-                        {String(
-                          customer.fullName ??
-                            customer.documentNumber ??
-                            customer.id,
-                        )}
-                      </option>
-                    ))}
-                  </Select>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <Select
-                      label="Comprobante"
-                      value={invoiceType}
-                      onChange={(e) => setInvoiceType(e.target.value)}
-                    >
-                      <option value="TICKET">Ticket (Interno)</option>
-                      <option value="BOLETA">Boleta</option>
-                      <option value="FACTURA">Factura</option>
-                    </Select>
-                    {invoiceType !== "TICKET" && (
-                      <div className="space-y-2">
-                        <Label>Nº (Opcional)</Label>
-                        <Input
-                          placeholder="Ej. B001-23"
-                          value={invoiceNumber}
-                          onChange={(e) => setInvoiceNumber(e.target.value)}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <Select
-                    label="Método de pago"
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                  >
-                    {paymentOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
-
-                  <div className="space-y-2 pt-2">
-                    <Button
-                      className="h-12 w-full text-base font-semibold shadow-md"
-                      disabled={
-                        (!cart.length && !pendingSales.length) ||
-                        (retroactive && (!cashShiftId || !retroactiveReason.trim())) ||
-                        createSale.isPending
-                      }
-                      onClick={() => createSale.mutate({ chargeToStay: false })}
-                    >
-                      {createSale.isPending
-                        ? "Procesando..."
-                        : `Cobrar ${money(grandTotal)}`}
-                    </Button>
-                    <Button
-                      className="h-11 w-full"
-                      variant="outline"
-                      disabled={!cart.length || !stayId || retroactive || createSale.isPending}
-                      onClick={() => createSale.mutate({ chargeToStay: true })}
-                    >
-                      Dejar pendiente en Hab.{" "}
-                      {selectedStay
-                        ? String(getValue(selectedStay, "room.roomNumber") ?? "")
-                        : ""}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
+                <span className="text-2xl font-bold text-primary">
+                  {money(grandTotal)}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden">
+              {renderCart()}
+            </CardContent>
           </Card>
         </div>
       </div>
 
-      {hasSaleItems && (
-        <div className="fixed inset-x-3 bottom-16 z-40 rounded-lg border border-border bg-card p-3 shadow-xl md:bottom-4 lg:hidden">
-          <div className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">Carrito</p>
-              <p className="truncate text-lg font-bold text-primary">
-                {money(grandTotal)}
-              </p>
+      {/* Móvil: el carrito se abre como modal desde el botón fijo */}
+      <Dialog open={cartOpen} onOpenChange={setCartOpen}>
+        <DialogContent className="flex max-h-[92svh] flex-col p-0">
+          <DialogTitle className="sr-only">Resumen de venta</DialogTitle>
+          <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted/20 px-5 py-4 pr-12">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold">Resumen de Venta</h2>
             </div>
-            <Button
-              type="button"
-              className="h-11"
-              onClick={() =>
-                saleSummaryRef.current?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "start",
-                })
-              }
-            >
-              <ShoppingCart className="h-4 w-4" />
-              Ver carrito
-            </Button>
+            <span className="text-xl font-bold text-primary">
+              {money(grandTotal)}
+            </span>
           </div>
+          <div className="flex-1 overflow-y-auto px-5 py-5">{renderCart()}</div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Botón fijo "Ver carrito" con contador (solo móvil). Va por encima de la bottom-nav. */}
+      <div
+        className="fixed inset-x-3 z-30 rounded-lg border border-border bg-card p-3 shadow-xl lg:hidden"
+        style={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom))" }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground">
+              {cartCount} {cartCount === 1 ? "producto" : "productos"}
+            </p>
+            <p className="truncate text-lg font-bold text-primary">
+              {money(grandTotal)}
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="lg"
+            className="relative shrink-0"
+            onClick={() => setCartOpen(true)}
+          >
+            <ShoppingCart className="h-5 w-5" />
+            Ver carrito
+            {cartCount > 0 && (
+              <span className="absolute -right-2 -top-2 grid h-6 min-w-6 place-items-center rounded-full bg-secondary px-1 text-xs font-bold text-secondary-foreground">
+                {cartCount}
+              </span>
+            )}
+          </Button>
         </div>
-      )}
+      </div>
     </section>
   );
 }

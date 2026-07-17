@@ -17,6 +17,7 @@ import { ResourceFormDialog } from "../../components/forms/resource-form-dialog"
 import { CashShiftSelect } from "../../components/cash-shift-select";
 import { StatusBadge } from "../../components/status-badge/status-badge";
 import { ConfirmDialog } from "../../components/ui/alert-dialog";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Select } from "../../components/ui/select";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
@@ -303,6 +304,7 @@ export function StaysPage() {
           const pendingTotal = openCharges
             .filter((sale) => Number(sale.stayId) === Number(stay.id))
             .reduce((sum, sale) => sum + Number(sale.total ?? 0), 0);
+          const fullyPaid = lodgingPendingForStay === 0 && pendingTotal === 0;
 
           return (
             <Card key={String(stay.id)} className="overflow-hidden">
@@ -314,7 +316,19 @@ export function StaysPage() {
                       Hab. {String(getValue(stay, "room.roomNumber") ?? "-")}
                     </span>
                   </div>
-                  <StatusBadge value={stay.status} />
+                  <div className="flex items-center gap-2">
+                    {fullyPaid ? (
+                      <Badge tone="green" className="gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Pagado
+                      </Badge>
+                    ) : (
+                      <Badge tone="amber" className="gap-1">
+                        Pendiente
+                      </Badge>
+                    )}
+                    <StatusBadge value={stay.status} />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4 p-4">
@@ -374,16 +388,18 @@ export function StaysPage() {
                     <PackagePlus className="h-4 w-4" />
                     Agregar cargo
                   </Button>
+                  {!fullyPaid && (
+                    <Button
+                      className="h-11"
+                      variant="outline"
+                      onClick={() => navigate(`/sales?stayId=${stay.id}`)}
+                    >
+                      <ShoppingCart className="h-4 w-4" />
+                      Cobrar en caja
+                    </Button>
+                  )}
                   <Button
-                    className="h-11"
-                    variant="outline"
-                    onClick={() => navigate(`/sales?stayId=${stay.id}`)}
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                    Cobrar en caja
-                  </Button>
-                  <Button
-                    className="h-11"
+                    className="h-11 sm:col-span-2"
                     variant="secondary"
                     disabled={pendingTotal > 0}
                     onClick={() => setCheckoutId(Number(stay.id))}
@@ -418,17 +434,24 @@ export function StaysPage() {
                   Confirma cuando la habitación esté lista.
                 </p>
               </div>
-              {canMarkClean && (
-                <Button
-                  className="h-11 w-full"
-                  variant="outline"
-                  disabled={markClean.isPending}
-                  onClick={() => markClean.mutate(Number(room.id))}
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  Confirmar limpieza
-                </Button>
-              )}
+              <Button
+                className="h-11 w-full"
+                variant="outline"
+                disabled={!canMarkClean || markClean.isPending}
+                onClick={() => markClean.mutate(Number(room.id))}
+                title={
+                  canMarkClean
+                    ? "Marcar la habitación como limpia y disponible"
+                    : "Tu rol no tiene permiso para confirmar limpieza"
+                }
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {markClean.isPending
+                  ? "Confirmando..."
+                  : canMarkClean
+                    ? "Confirmar limpieza"
+                    : "Sin permiso de limpieza"}
+              </Button>
             </CardContent>
           </Card>
         ))}
