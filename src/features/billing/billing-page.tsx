@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   ShieldX,
   ShieldAlert,
+  RefreshCw,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -64,12 +65,27 @@ export function BillingPage() {
   const query = useQuery({
     queryKey: ['billing'],
     queryFn: () => resourceApi.list('billing'),
-    // Mientras haya boletas en proceso en SUNAT (Resumen Diario), refresca cada 5s
-    // para reflejar el resultado cuando el backend consulte el ticket.
-    refetchInterval: (q) => {
-      const rows = normalizeRows(q.state.data);
-      return rows.some((r) => String(r.status) === 'PENDING') ? 5000 : false;
+  });
+
+  // Botón "Actualizar estado SUNAT": consulta los tickets pendientes en SUNAT
+  // bajo demanda. No hay polling automático, así el usuario controla cuándo gastar.
+  const processPending = useMutation({
+    mutationFn: () => resourceApi.post('billing/process-pending', {}),
+    onSuccess: (res: AnyRow) => {
+      const resolved = Number(res?.resolvedInvoices ?? 0);
+      const pending = Number(res?.stillPending ?? 0);
+      if (resolved > 0) {
+        toast.success(
+          `${resolved} comprobante(s) actualizado(s) por SUNAT.`,
+        );
+      } else if (pending > 0) {
+        toast.info(`SUNAT sigue procesando ${pending} comprobante(s). Intenta de nuevo en unos minutos.`);
+      } else {
+        toast.info('No hay comprobantes pendientes de SUNAT.');
+      }
+      void queryClient.invalidateQueries({ queryKey: ['billing'] });
     },
+    onError: (error) => toast.error(errorMessage(error)),
   });
 
   const viewPdf = useMutation({
@@ -142,11 +158,23 @@ export function BillingPage() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-normal">Comprobantes Electrónicos</h1>
-        <p className="text-sm text-muted-foreground">
-          Comprobantes emitidos a SUNAT (facturas, boletas y notas de crédito).
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-normal">Comprobantes Electrónicos</h1>
+          <p className="text-sm text-muted-foreground">
+            Comprobantes emitidos a SUNAT (facturas, boletas y notas de crédito).
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => processPending.mutate()}
+          disabled={processPending.isPending}
+          className="gap-1.5 shrink-0"
+          title="Consulta en SUNAT el estado de las boletas enviadas en Resumen Diario (sendSummary). No se ejecuta automáticamente: solo cuando presionas este botón."
+        >
+          <RefreshCw className={`h-4 w-4 ${processPending.isPending ? 'animate-spin' : ''}`} />
+          {processPending.isPending ? 'Consultando SUNAT...' : 'Actualizar estado SUNAT'}
+        </Button>
       </div>
 
       {/* Stats */}
