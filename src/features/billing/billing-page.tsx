@@ -40,12 +40,17 @@ const STATUS_META: Record<string, { label: string; tone: 'green' | 'amber' | 're
   ACCEPTED: { label: 'Aceptado', tone: 'green', icon: <ShieldCheck className="h-3 w-3" /> },
   OBSERVED: { label: 'Observado', tone: 'amber', icon: <ShieldAlert className="h-3 w-3" /> },
   REJECTED: { label: 'Rechazado', tone: 'red', icon: <ShieldX className="h-3 w-3" /> },
-  PENDING: { label: 'En SUNAT', tone: 'amber', icon: <ShieldAlert className="h-3 w-3" /> },
+  PENDING: { label: 'No aceptado aún', tone: 'amber', icon: <ShieldAlert className="h-3 w-3" /> },
   CANCELED: { label: 'Anulado', tone: 'red', icon: <ShieldX className="h-3 w-3" /> },
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const meta = STATUS_META[status] ?? STATUS_META.PENDING;
+function StatusBadge({ status, summaryStatus }: { status: string; summaryStatus?: string }) {
+  const meta =
+    status === 'PENDING' && summaryStatus === 'error_envio'
+      ? { label: 'Error de envío', tone: 'red' as const, icon: <ShieldX className="h-3 w-3" /> }
+      : status === 'PENDING' && summaryStatus !== '98'
+        ? { label: 'No enviado', tone: 'amber' as const, icon: <ShieldAlert className="h-3 w-3" /> }
+        : STATUS_META[status] ?? STATUS_META.PENDING;
   return (
     <Badge tone={meta.tone}>
       {meta.icon}
@@ -162,7 +167,7 @@ export function BillingPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">Comprobantes Electrónicos</h1>
           <p className="text-sm text-muted-foreground">
-            Comprobantes emitidos a SUNAT (facturas, boletas y notas de crédito).
+            Comprobantes electrónicos (facturas, boletas y notas de crédito).
           </p>
         </div>
         <Button
@@ -182,7 +187,7 @@ export function BillingPage() {
         {[
           { label: 'Comprobantes', value: String(stats.count), icon: <Receipt className="h-5 w-5 text-primary" /> },
           { label: 'Aceptados', value: String(stats.accepted), icon: <ShieldCheck className="h-5 w-5 text-emerald-600" /> },
-          { label: 'En SUNAT', value: String(stats.pending), icon: <ShieldAlert className="h-5 w-5 text-amber-600" /> },
+          { label: 'No aceptados aún', value: String(stats.pending), icon: <ShieldAlert className="h-5 w-5 text-amber-600" /> },
           { label: 'Rechazados', value: String(stats.rejected), icon: <ShieldX className="h-5 w-5 text-red-600" /> },
           { label: 'Facturado (aceptado)', value: money(stats.total), icon: <FileText className="h-5 w-5 text-violet-600" /> },
         ].map((stat) => (
@@ -217,7 +222,7 @@ export function BillingPage() {
               <option value="">Todos los estados</option>
               <option value="ACCEPTED">Aceptados</option>
               <option value="OBSERVED">Observados</option>
-              <option value="PENDING">En SUNAT</option>
+              <option value="PENDING">No aceptados aún</option>
               <option value="REJECTED">Rechazados</option>
               <option value="CANCELED">Anulados</option>
             </Select>
@@ -341,7 +346,7 @@ function InvoiceCard({
             <span className="font-bold text-primary text-sm">
               {TYPE_LABELS[type] ?? type} {String(invoice.docNumber ?? '')}
             </span>
-            <StatusBadge status={status} />
+            <StatusBadge status={status} summaryStatus={String(invoice.summaryStatus ?? '')} />
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span>{String(invoice.customerName ?? '-')}</span>

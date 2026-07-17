@@ -120,6 +120,13 @@ function SaleCard({
   const invoiceAccepted = invoiceStatus === 'ACCEPTED' || invoiceStatus === 'OBSERVED';
   // Comprobante pendiente de SUNAT (boleta en Resumen Diario) → bloqueado para evitar duplicados.
   const invoicePending = invoiceStatus === 'PENDING';
+  const invoiceSummaryStatus = String(invoice?.summaryStatus ?? '');
+  const invoicePendingLabel =
+    invoiceSummaryStatus === '98'
+      ? 'no aceptado aún'
+      : invoiceSummaryStatus === 'error_envio'
+        ? 'no enviado'
+        : 'no aceptado aún';
   // Comprobante rechazado → se puede reintentar.
   const invoiceRejected = invoiceStatus === 'REJECTED';
   // Puede emitir si está pagada, con cliente, y (sin comprobante o con comprobante rechazado).
@@ -233,9 +240,11 @@ function SaleCard({
               </span>
             )}
             {invoicePending && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+              <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold ${
+                invoiceSummaryStatus === 'error_envio' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
+              }`}>
                 <FileText className="h-3 w-3" />
-                {SUNAT_TYPE_LABELS[String(invoice?.invoiceType ?? '03')] ?? 'Boleta'} {String(invoice?.docNumber ?? '')} · en SUNAT…
+                {SUNAT_TYPE_LABELS[String(invoice?.invoiceType ?? '03')] ?? 'Boleta'} {String(invoice?.docNumber ?? '')} · {invoicePendingLabel}
               </span>
             )}
             {invoiceRejected && !canInvoice && (
@@ -391,10 +400,14 @@ export function SalesHistoryPage() {
       } else if (res.status === 'OBSERVED') {
         toast.warning(`Comprobante ${res.docNumber} observado (código ${code}).`);
       } else if (res.status === 'PENDING') {
-        // Boleta enviada en Resumen Diario (flujo asíncrono). SUNAT responde más tarde.
-        toast.info(
-          `Boleta ${res.docNumber} enviada a SUNAT (Resumen Diario). El estado se actualizará en unos minutos.`,
-        );
+        if (res.summaryError) {
+          toast.error(`Boleta ${res.docNumber} pendiente: no se pudo enviar el resumen a SUNAT.`);
+        } else {
+          // Boleta pendiente: el Resumen Diario es asíncrono y aún no hay aceptación.
+          toast.info(
+            `Boleta ${res.docNumber} pendiente: aún no fue aceptada por SUNAT.`,
+          );
+        }
       } else {
         toast.error(`SUNAT rechazó el comprobante (código ${code}).`);
       }
