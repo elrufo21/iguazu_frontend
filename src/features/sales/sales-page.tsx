@@ -92,10 +92,6 @@ export function SalesPage() {
     queryKey: ["stays", "active"],
     queryFn: () => resourceApi.list("stays/active"),
   });
-  const salesQuery = useQuery({
-    queryKey: ["sales"],
-    queryFn: () => resourceApi.list("sales"),
-  });
   const cashShiftsQuery = useQuery({
     queryKey: ["cash-shift", "history", "retroactive-sales"],
     queryFn: () => resourceApi.list("cash-shift/history"),
@@ -107,23 +103,22 @@ export function SalesPage() {
   );
   const customers = normalizeRows(customersQuery.data);
   const stays = normalizeRows(staysQuery.data);
-  const sales = normalizeRows(salesQuery.data);
   const closedCashShifts = normalizeRows(cashShiftsQuery.data).filter(
     (shift) => shift.status === "CLOSED",
   );
   const selectedStay = stays.find((stay) => String(stay.id) === stayId);
+  const selectedStaySales = normalizeRows(selectedStay?.sales);
   const selectedRoomId = Number(getValue(selectedStay ?? {}, "room.id") ?? 0);
   const lodgingRegistered = useMemo(
     () =>
-      sales.some(
+      selectedStaySales.some(
         (sale) =>
-          Number(sale.stayId) === Number(stayId) &&
           sale.status !== "CANCELLED" &&
           ((sale.details as AnyRow[] | undefined) ?? []).some(
             (detail) => detail.itemType === "ROOM_RENT",
           ),
       ),
-    [sales, stayId],
+    [selectedStaySales],
   );
   const roomProductsQuery = useQuery({
     queryKey: ["room-products", selectedRoomId],
@@ -141,16 +136,16 @@ export function SalesPage() {
 
   // Auto-cargar carrito al seleccionar una estadía
   useEffect(() => {
-    if (salesQuery.isLoading) return;
-    if (stayId === prevStayIdRef.current) return;
-    prevStayIdRef.current = stayId;
-
-    if (!stayId || !selectedStay) {
+    if (!stayId) {
       // Si se deselecciona la habitación, limpiar carrito y pendientes
+      prevStayIdRef.current = "";
       setCart([]);
       setPendingSales([]);
       return;
     }
+    if (!selectedStay) return;
+    if (stayId === prevStayIdRef.current) return;
+    prevStayIdRef.current = stayId;
 
     // 1. Agregar alojamiento automáticamente solo si aún no existe.
     const stayNum = Number(selectedStay.id);
@@ -172,11 +167,9 @@ export function SalesPage() {
     setCart(newCart);
 
     // 2. Cargar cargos pendientes de BD
-    const stayPendingSales = sales.filter(
-      (s) => Number(s.stayId) === stayNum && s.status === "OPEN",
-    );
+    const stayPendingSales = selectedStaySales.filter((s) => s.status === "OPEN");
     setPendingSales(stayPendingSales);
-  }, [stayId, selectedStay, sales, salesQuery.isLoading, lodgingRegistered]);
+  }, [stayId, selectedStay, selectedStaySales, lodgingRegistered]);
 
   const roomProducts = normalizeRows(roomProductsQuery.data).filter(
     (item) => Number(item.quantity ?? 0) > 0,

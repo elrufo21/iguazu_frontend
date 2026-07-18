@@ -31,13 +31,37 @@ import { normalizeRows, saveResource } from '../shared/resource-save';
 type WorkShift = 'DAY' | 'NIGHT';
 
 const cashMovementConfig = modules.cashMovements;
+const cashIncomeConfig = {
+  ...cashMovementConfig,
+  createPath: 'cash-movements/income',
+  createLabel: 'Registrar ingreso',
+  description: 'Ingreso manual a la caja actual.',
+  fields: cashMovementConfig.fields.map((field) =>
+    field.name === 'category'
+      ? {
+          ...field,
+          label: 'Tipo de ingreso',
+          options: [{ label: 'Ingreso de dinero', value: 'CASH_ADJUSTMENT' }],
+        }
+      : field.name === 'cashShiftId'
+        ? {
+            ...field,
+            label: 'Caja abierta',
+            endpoint: 'cash-shift/open/all',
+            helper: 'Como ADMIN selecciona la caja abierta que recibirá el ingreso.',
+          }
+        : field,
+  ),
+};
 
 export function CashMovementsPage() {
   const [open, setOpen] = useState(false);
+  const [movementForm, setMovementForm] = useState<'income' | 'expense'>('expense');
   const [cashShiftId, setCashShiftId] = useState('');
   const [openedDate, setOpenedDate] = useState('');
   const [search, setSearch] = useState('');
   const queryClient = useQueryClient();
+  const formConfig = movementForm === 'income' ? cashIncomeConfig : cashMovementConfig;
 
   const movementsQuery = useQuery({
     queryKey: ['cash-movements', cashShiftId],
@@ -94,9 +118,9 @@ export function CashMovementsPage() {
   }, [filtered]);
 
   const save = useMutation({
-    mutationFn: (values: Record<string, unknown>) => saveResource(cashMovementConfig, values),
+    mutationFn: (values: Record<string, unknown>) => saveResource(formConfig, values),
     onSuccess: () => {
-      toast.success('Salida registrada');
+      toast.success(movementForm === 'income' ? 'Ingreso registrado' : 'Salida registrada');
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ['cash-movements'] });
     },
@@ -110,10 +134,27 @@ export function CashMovementsPage() {
           <h1 className="text-2xl font-semibold tracking-normal">Movimientos de caja</h1>
           <p className="mt-1 text-sm text-muted-foreground">Ingresos, salidas y detalle de lo vendido por caja.</p>
         </div>
-        <Button onClick={() => setOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Registrar salida
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setMovementForm('income');
+              setOpen(true);
+            }}
+          >
+            <ArrowUpCircle className="h-4 w-4" />
+            Registrar ingreso
+          </Button>
+          <Button
+            onClick={() => {
+              setMovementForm('expense');
+              setOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Registrar salida
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">
@@ -174,10 +215,10 @@ export function CashMovementsPage() {
 
       <ResourceFormDialog
         open={open}
-        title={cashMovementConfig.createLabel ?? 'Registrar salida'}
-        description={cashMovementConfig.description}
-        fields={cashMovementConfig.fields}
-        schema={cashMovementConfig.schema}
+        title={formConfig.createLabel ?? 'Registrar movimiento'}
+        description={formConfig.description}
+        fields={formConfig.fields}
+        schema={formConfig.schema}
         saving={save.isPending}
         onOpenChange={setOpen}
         onSubmit={(values) => save.mutate(values)}

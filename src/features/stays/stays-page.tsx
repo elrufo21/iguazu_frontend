@@ -78,10 +78,6 @@ export function StaysPage() {
     queryKey: ["rooms"],
     queryFn: () => resourceApi.list("rooms"),
   });
-  const salesQuery = useQuery({
-    queryKey: ["sales"],
-    queryFn: () => resourceApi.list("sales"),
-  });
   const productsQuery = useQuery({
     queryKey: ["products"],
     queryFn: () => resourceApi.list("products"),
@@ -99,9 +95,6 @@ export function StaysPage() {
   });
   const stays = normalizeRows(staysQuery.data);
   const rooms = normalizeRows(roomsQuery.data);
-  const openCharges = normalizeRows(salesQuery.data).filter(
-    (sale) => sale.status === "OPEN",
-  );
   const products = normalizeRows(productsQuery.data).filter(
     (product) => product.active !== false,
   );
@@ -288,21 +281,17 @@ export function StaysPage() {
 
       <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
         {stays.map((stay) => {
-          const staySales = salesQuery.data ? normalizeRows(salesQuery.data).filter(
-            (sale) =>
-              Number(sale.stayId) === Number(stay.id) &&
-              sale.status !== "CANCELLED",
-          ) : [];
+          const staySales = normalizeRows(stay.sales);
           const lodgingRegistered = staySales.some((sale) =>
             ((sale.details as AnyRow[] | undefined) ?? []).some(
-              (detail) => detail.itemType === "ROOM_RENT",
+              (detail) => detail.itemType === "ROOM_RENT" && sale.status === "PAID",
             ),
           );
           const lodgingPendingForStay = lodgingRegistered
             ? 0
             : Number(stay.agreedPrice ?? 0);
-          const pendingTotal = openCharges
-            .filter((sale) => Number(sale.stayId) === Number(stay.id))
+          const pendingTotal = staySales
+            .filter((sale) => sale.status === "OPEN")
             .reduce((sum, sale) => sum + Number(sale.total ?? 0), 0);
           const fullyPaid = lodgingPendingForStay === 0 && pendingTotal === 0;
 

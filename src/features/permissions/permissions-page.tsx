@@ -166,6 +166,12 @@ const PERM_META: Record<string, PermMeta> = {
     icon: Banknote,
     description: 'Permite registrar egresos como retiro, compra o ajuste.',
   },
+  'POST /cash-movements/income': {
+    label: 'Registrar ingreso de dinero',
+    group: 'Movimientos de caja',
+    icon: Banknote,
+    description: 'Permite sumar dinero manualmente a la caja.',
+  },
   'POST /cash-movements/:id/reverse': {
     label: 'Revertir movimiento',
     group: 'Movimientos de caja',
