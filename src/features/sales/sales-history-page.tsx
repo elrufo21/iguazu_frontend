@@ -35,6 +35,7 @@ import { Select } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import { resourceApi } from '../../lib/api';
 import { errorMessage } from '../../lib/api-error';
+import { hasPermission } from '../../lib/permissions';
 import { dateTime, getValue, money, productTitle } from '../../lib/utils';
 import { useAuthStore } from '../../store/auth.store';
 import type { AnyRow } from '../../types';
@@ -83,22 +84,28 @@ function SaleCard({
   sale,
   onPay,
   onInvoice,
+  onMarkInvoiceRejected,
   onEdit,
   onCancel,
   isPaying,
   isInvoicing,
+  isMarkingInvoiceRejected,
   isCancelling,
   canEdit,
+  canMarkInvoiceRejected,
 }: {
   sale: AnyRow;
   onPay: (sale: AnyRow) => void;
   onInvoice: (sale: AnyRow) => void;
+  onMarkInvoiceRejected: (sale: AnyRow) => void;
   onEdit: (sale: AnyRow) => void;
   onCancel: (sale: AnyRow) => void;
   isPaying: boolean;
   isInvoicing: boolean;
+  isMarkingInvoiceRejected: boolean;
   isCancelling: boolean;
   canEdit: boolean;
+  canMarkInvoiceRejected: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const details = (sale.details as AnyRow[] | undefined) ?? [];
@@ -126,6 +133,11 @@ function SaleCard({
       : invoiceSummaryStatus === 'error_envio'
         ? 'no enviado'
         : 'no aceptado aún';
+  const canEnableInvoiceRetry =
+    canMarkInvoiceRejected &&
+    String(invoice?.invoiceType ?? '') === '03' &&
+    invoicePending &&
+    !invoice?.cdrXml;
   // Comprobante rechazado → se puede reintentar.
   const invoiceRejected = invoiceStatus === 'REJECTED';
   // Puede emitir si está pagada, con cliente, y (sin comprobante o con comprobante rechazado).
@@ -246,6 +258,18 @@ function SaleCard({
                 {SUNAT_TYPE_LABELS[String(invoice?.invoiceType ?? '03')] ?? 'Boleta'} {String(invoice?.docNumber ?? '')} · {invoicePendingLabel}
               </span>
             )}
+            {canEnableInvoiceRetry && (
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={isMarkingInvoiceRejected}
+                onClick={() => onMarkInvoiceRejected(sale)}
+                className="gap-1.5"
+              >
+                <FileText className="h-4 w-4" />
+                {isMarkingInvoiceRejected ? 'Habilitando...' : 'Habilitar reenvío'}
+              </Button>
+            )}
             {invoiceRejected && !canInvoice && (
               <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
                 <FileText className="h-3 w-3" />
@@ -347,6 +371,7 @@ export function SalesHistoryPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN';
+  const canMarkInvoiceRejected = hasPermission(user, 'POST /billing/:id/mark-rejected');
 
   const salesQuery = useQuery({
     queryKey: ['sales'],
@@ -411,6 +436,17 @@ export function SalesHistoryPage() {
       }
       setInvoiceSale(null);
       void queryClient.invalidateQueries();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const markInvoiceRejected = useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason: string }) =>
+      resourceApi.post(`billing/${id}/mark-rejected`, { reason }),
+    onSuccess: () => {
+      toast.success('Venta habilitada para reenviar comprobante.');
+      void queryClient.invalidateQueries({ queryKey: ['sales'] });
+      void queryClient.invalidateQueries({ queryKey: ['billing'] });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
@@ -580,6 +616,15 @@ export function SalesHistoryPage() {
                 setInvoiceSale(s);
                 setInvoiceType('auto');
               }}
+              onMarkInvoiceRejected={(s) => {
+                const invoice = s.invoice as AnyRow | undefined;
+                const reason = window.prompt(
+                  'Motivo para habilitar reenvío',
+                  'Error de envío/consulta SUNAT; habilitar reenvío',
+                );
+                if (!invoice || !reason?.trim()) return;
+                markInvoiceRejected.mutate({ id: Number(invoice.id), reason: reason.trim() });
+              }}
               onEdit={(s) => {
                 setEditSale(s);
                 setEditReason('');
@@ -606,8 +651,13 @@ export function SalesHistoryPage() {
               }}
               isPaying={paySale.isPending}
               isInvoicing={issueInvoice.isPending && issueInvoice.variables?.id === sale.id}
+              isMarkingInvoiceRejected={Boolean(
+                markInvoiceRejected.isPending &&
+                markInvoiceRejected.variables?.id === Number(getValue(sale, 'invoice.id'))
+              )}
               isCancelling={cancel.isPending && cancel.variables?.id === sale.id}
               canEdit={canEditSale(sale)}
+              canMarkInvoiceRejected={canMarkInvoiceRejected}
             />
           ))}
         </div>

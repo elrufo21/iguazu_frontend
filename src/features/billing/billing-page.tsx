@@ -25,7 +25,9 @@ import {
 } from '../../components/ui/dialog';
 import { resourceApi } from '../../lib/api';
 import { errorMessage } from '../../lib/api-error';
+import { hasPermission } from '../../lib/permissions';
 import { dateTime, getValue, money } from '../../lib/utils';
+import { useAuthStore } from '../../store/auth.store';
 import type { AnyRow } from '../../types';
 import { normalizeRows } from '../shared/resource-save';
 
@@ -65,6 +67,8 @@ export function BillingPage() {
   const [pdfInvoice, setPdfInvoice] = useState<AnyRow | null>(null);
   const [creditInvoice, setCreditInvoice] = useState<AnyRow | null>(null);
   const [creditReason, setCreditReason] = useState('');
+  const user = useAuthStore((state) => state.user);
+  const canMarkRejected = hasPermission(user, 'POST /billing/:id/mark-rejected');
   const queryClient = useQueryClient();
 
   const query = useQuery({
@@ -116,6 +120,17 @@ export function BillingPage() {
       setCreditInvoice(null);
       setCreditReason('');
       void queryClient.invalidateQueries({ queryKey: ['billing'] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const markRejected = useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason: string }) =>
+      resourceApi.post(`billing/${id}/mark-rejected`, { reason }),
+    onSuccess: () => {
+      toast.success('Comprobante habilitado para reenvío.');
+      void queryClient.invalidateQueries({ queryKey: ['billing'] });
+      void queryClient.invalidateQueries({ queryKey: ['sales'] });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
@@ -253,6 +268,16 @@ export function BillingPage() {
                 setCreditInvoice(inv);
                 setCreditReason('');
               }}
+              onMarkRejected={(inv) => {
+                const reason = window.prompt(
+                  'Motivo para habilitar reenvío',
+                  'Error de envío/consulta SUNAT; habilitar reenvío',
+                );
+                if (!reason?.trim()) return;
+                markRejected.mutate({ id: Number(inv.id), reason: reason.trim() });
+              }}
+              canMarkRejected={canMarkRejected}
+              isMarkingRejected={Boolean(markRejected.isPending && markRejected.variables?.id === Number(invoice.id))}
               isLoading={viewPdf.isPending && viewPdf.variables?.id === invoice.id}
             />
           ))}
@@ -325,6 +350,9 @@ function InvoiceCard({
   onDownloadXml,
   onDownloadCdr,
   onCreditNote,
+  onMarkRejected,
+  canMarkRejected,
+  isMarkingRejected,
   isLoading,
 }: {
   invoice: AnyRow;
@@ -332,6 +360,9 @@ function InvoiceCard({
   onDownloadXml: (invoice: AnyRow) => void;
   onDownloadCdr: (invoice: AnyRow) => void;
   onCreditNote: (invoice: AnyRow) => void;
+  onMarkRejected: (invoice: AnyRow) => void;
+  canMarkRejected: boolean;
+  isMarkingRejected: boolean;
   isLoading: boolean;
 }) {
   const type = String(invoice.invoiceType ?? '03');
@@ -340,6 +371,7 @@ function InvoiceCard({
   const canCancel = status === 'ACCEPTED' && !isCreditNote;
   // Boleta en Resumen Diario: el CDR aún no está disponible hasta que SUNAT procese el ticket.
   const isPending = status === 'PENDING';
+  const canEnableRetry = canMarkRejected && type === '03' && isPending && !invoice.cdrXml;
 
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm p-4">
@@ -380,6 +412,18 @@ function InvoiceCard({
       </div>
 
       <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-border/40">
+        {canEnableRetry && (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => onMarkRejected(invoice)}
+            disabled={isMarkingRejected}
+            className="gap-1.5"
+          >
+            <RefreshCw className="h-4 w-4" />
+            {isMarkingRejected ? 'Habilitando...' : 'Habilitar reenvío'}
+          </Button>
+        )}
         {canCancel && (
           <Button variant="outline" size="sm" onClick={() => onCreditNote(invoice)} className="gap-1.5">
             <RotateCcw className="h-4 w-4" />
