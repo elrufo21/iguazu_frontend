@@ -79,10 +79,13 @@ export function BillingPage() {
     onSuccess: (res: AnyRow) => {
       const resolved = Number(res?.resolvedInvoices ?? 0);
       const pending = Number(res?.stillPending ?? 0);
+      const queryErrors = Number(res?.queryErrors ?? 0);
       if (resolved > 0) {
         toast.success(
           `${resolved} comprobante(s) actualizado(s) por SUNAT.`,
         );
+      } else if (queryErrors > 0) {
+        toast.error(`SUNAT falló al consultar ${queryErrors} ticket(s). El comprobante sigue no aceptado.`);
       } else if (pending > 0) {
         toast.info(`SUNAT sigue procesando ${pending} comprobante(s). Intenta de nuevo en unos minutos.`);
       } else {
@@ -353,9 +356,13 @@ function InvoiceCard({
             <span>Doc.: {String(invoice.customerDocNumber ?? '-')}</span>
             <span>{dateTime(invoice.createdAt)}</span>
           </div>
-          {Boolean(invoice.sunatCode) && (
+          {Boolean(invoice.sunatCode || invoice.sunatDescription) && (
             <p className="text-xs text-muted-foreground mt-1">
-              SUNAT código: <span className="font-mono">{String(invoice.sunatCode)}</span>
+              {invoice.sunatCode ? (
+                <>SUNAT código: <span className="font-mono">{String(invoice.sunatCode)}</span></>
+              ) : (
+                'SUNAT: '
+              )}
               {invoice.sunatDescription ? ` — ${String(invoice.sunatDescription)}` : ''}
             </p>
           )}

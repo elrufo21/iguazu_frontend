@@ -187,6 +187,7 @@ const PERM_META: Record<string, PermMeta> = {
   // Comprobantes / Facturación
   'POST /billing/issue-from-sale/:saleId': { label: 'Emitir comprobante', group: 'Comprobantes', icon: FileText },
   'POST /billing/:id/credit-note': { label: 'Emitir nota de crédito', group: 'Comprobantes', icon: FileText },
+  'POST /billing/:id/mark-rejected': { label: 'Marcar rechazo manual', group: 'Comprobantes', icon: FileText },
   'GET /billing': { label: 'Ver comprobantes', group: 'Comprobantes', icon: FileText },
   'GET /billing/:id': { label: 'Ver comprobante', group: 'Comprobantes', icon: FileText },
   'GET /billing/:id/pdf': { label: 'Descargar PDF', group: 'Comprobantes', icon: FileText },

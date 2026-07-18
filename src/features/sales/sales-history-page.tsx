@@ -21,7 +21,6 @@ import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { StatusBadge } from '../../components/status-badge/status-badge';
-import { CashShiftSelect } from '../../components/cash-shift-select';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import {
@@ -337,7 +336,6 @@ export function SalesHistoryPage() {
   const [invoiceType, setInvoiceType] = useState<'auto' | '01' | '03'>('auto');
   const [cancelSale, setCancelSale] = useState<AnyRow | null>(null);
   const [cancelReason, setCancelReason] = useState('');
-  const [cancelCashShiftId, setCancelCashShiftId] = useState('');
   const [editSale, setEditSale] = useState<AnyRow | null>(null);
   const [editReason, setEditReason] = useState('');
   const [editDetails, setEditDetails] = useState<EditDetail[]>([]);
@@ -418,16 +416,14 @@ export function SalesHistoryPage() {
   });
 
   const cancel = useMutation({
-    mutationFn: ({ id, reason, cashShiftId }: { id: number; reason: string; cashShiftId?: number }) =>
+    mutationFn: ({ id, reason }: { id: number; reason: string }) =>
       resourceApi.post(`sales/${id}/cancel`, {
         reason,
-        ...(cashShiftId ? { cashShiftId } : {}),
       }),
     onSuccess: () => {
       toast.success('Venta anulada');
       setCancelSale(null);
       setCancelReason('');
-      setCancelCashShiftId('');
       void queryClient.invalidateQueries({ queryKey: ['sales'] });
       void queryClient.invalidateQueries({ queryKey: ['cash-movements'] });
       void queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -607,7 +603,6 @@ export function SalesHistoryPage() {
               onCancel={(s) => {
                 setCancelSale(s);
                 setCancelReason('');
-                setCancelCashShiftId('');
               }}
               isPaying={paySale.isPending}
               isInvoicing={issueInvoice.isPending && issueInvoice.variables?.id === sale.id}
@@ -640,10 +635,7 @@ export function SalesHistoryPage() {
       <CancelSaleDialog
         sale={cancelSale}
         reason={cancelReason}
-        cashShiftId={cancelCashShiftId}
-        showCashShift={user?.role === 'ADMIN' && String(cancelSale?.status ?? '') === 'PAID'}
         onReasonChange={setCancelReason}
-        onCashShiftChange={setCancelCashShiftId}
         onOpenChange={(open) => {
           if (!open) setCancelSale(null);
         }}
@@ -654,14 +646,9 @@ export function SalesHistoryPage() {
             toast.error('Ingresa el motivo de anulación.');
             return;
           }
-          if (user?.role === 'ADMIN' && String(cancelSale.status ?? '') === 'PAID' && !cancelCashShiftId) {
-            toast.error('Selecciona la caja abierta para registrar la salida.');
-            return;
-          }
           cancel.mutate({
             id: Number(cancelSale.id),
             reason,
-            cashShiftId: cancelCashShiftId ? Number(cancelCashShiftId) : undefined,
           });
         }}
         pending={cancel.isPending}
@@ -982,20 +969,14 @@ function EditSaleDialog({
 function CancelSaleDialog({
   sale,
   reason,
-  cashShiftId,
-  showCashShift,
   onReasonChange,
-  onCashShiftChange,
   onOpenChange,
   onConfirm,
   pending,
 }: {
   sale: AnyRow | null;
   reason: string;
-  cashShiftId: string;
-  showCashShift: boolean;
   onReasonChange: (value: string) => void;
-  onCashShiftChange: (value: string) => void;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   pending: boolean;
@@ -1007,7 +988,7 @@ function CancelSaleDialog({
       <DialogContent className="w-[min(480px,calc(100vw-2rem))] p-5">
         <DialogTitle className="text-lg font-semibold">Anular venta #{String(sale.id)}</DialogTitle>
         <DialogDescription className="mt-2 text-sm text-muted-foreground">
-          Se devolverá el stock de productos y, si ya fue cobrada, se registrará una salida de caja por {money(sale.total)}.
+          Se devolverá el stock y, si ya fue cobrada, se registrará la salida en la misma caja de la venta por {money(sale.total)}.
         </DialogDescription>
 
         <div className="mt-4 space-y-2">
@@ -1018,12 +999,6 @@ function CancelSaleDialog({
             placeholder="Ej. Error en venta, producto devuelto..."
           />
         </div>
-
-        {showCashShift && (
-          <div className="mt-4">
-            <CashShiftSelect value={cashShiftId} onChange={onCashShiftChange} />
-          </div>
-        )}
 
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
