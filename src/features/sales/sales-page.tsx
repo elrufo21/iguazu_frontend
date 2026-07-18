@@ -107,7 +107,10 @@ export function SalesPage() {
     (shift) => shift.status === "CLOSED",
   );
   const selectedStay = stays.find((stay) => String(stay.id) === stayId);
-  const selectedStaySales = normalizeRows(selectedStay?.sales);
+  const selectedStaySales = useMemo(
+    () => normalizeRows(selectedStay?.sales),
+    [selectedStay?.sales],
+  );
   const selectedRoomId = Number(getValue(selectedStay ?? {}, "room.id") ?? 0);
   const lodgingRegistered = useMemo(
     () =>
@@ -139,8 +142,8 @@ export function SalesPage() {
     if (!stayId) {
       // Si se deselecciona la habitación, limpiar carrito y pendientes
       prevStayIdRef.current = "";
-      setCart([]);
-      setPendingSales([]);
+      setCart((items) => (items.length ? [] : items));
+      setPendingSales((sales) => (sales.length ? [] : sales));
       return;
     }
     if (!selectedStay) return;
