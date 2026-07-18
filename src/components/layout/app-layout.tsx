@@ -29,7 +29,9 @@ export function AppLayout() {
   const logout = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
   const location = useLocation();
-  const current = navItems?.find((item) => item?.path === location?.pathname);
+  const matchesPath = (path: string) =>
+    location.pathname === path || location.pathname.startsWith(`${path}/`);
+  const current = navItems?.find((item) => matchesPath(item.path));
   const canSeeItem = (item: (typeof navItems)[number]) =>
     item.adminOnly ? user?.role === "ADMIN" : hasPermission(user, item.permission);
   const visibleGroups = useMemo(
@@ -46,7 +48,7 @@ export function AppLayout() {
   const currentGroup = useMemo(
     () =>
       visibleGroups.find((group) =>
-        group.items.some((item) => item?.path === location.pathname),
+        group.items.some((item) => matchesPath(item.path)),
       )?.label ?? "Principal",
     [location.pathname, visibleGroups],
   );
@@ -121,8 +123,8 @@ export function AppLayout() {
                 </div>
               ))
             : visibleGroups.map((group) => {
-                const isCurrentGroup = group.items.some(
-                  (item) => item?.path === location.pathname,
+                const isCurrentGroup = group.items.some((item) =>
+                  matchesPath(item.path),
                 );
                 const open = openGroup === group.label;
                 return (
