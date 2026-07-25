@@ -895,6 +895,9 @@ function buildExportSections(report: ReportKey, data: AnyRow): ExportSection[] {
       sections.push({ title: 'Cierres', rows: normalizeRows(data.closures) });
       sections.push({ title: 'Movimientos de caja', rows: normalizeRows(data.movements) });
       break;
+    case 'cash-monthly':
+      sections.push({ title: 'Meses', rows: normalizeRows(data.months) });
+      break;
     case 'sales-full':
       sections.push({ title: 'Ingresos por tipo de habitación', rows: normalizeRows(data.incomeByRoomType) });
       sections.push({ title: 'Por tipo de ítem', rows: normalizeRows(data.byItemType) });
@@ -911,6 +914,9 @@ function buildExportSections(report: ReportKey, data: AnyRow): ExportSection[] {
     case 'product-sales-by-user':
       sections.push({ title: 'Productos por usuario', rows: normalizeRows(data.rows) });
       break;
+    case 'product-profit':
+      sections.push({ title: 'Productos', rows: normalizeRows(data.products) });
+      break;
     case 'inventory':
       sections.push({ title: 'Stock bajo', rows: normalizeRows(data.lowStock) });
       sections.push({ title: 'Movimientos', rows: normalizeRows(data.movements) });
@@ -923,7 +929,7 @@ function buildExportSections(report: ReportKey, data: AnyRow): ExportSection[] {
   return sections;
 }
 
-function summaryRows(report: ReportKey, data: AnyRow) {
+function summaryRows(report: ReportKey, data: AnyRow): Record<string, unknown>[] {
   switch (report) {
     case 'cash-summary':
       return metricRows([
@@ -935,6 +941,16 @@ function summaryRows(report: ReportKey, data: AnyRow) {
         ['Esperado', data.expectedTotal],
         ['Diferencia', data.differenceTotal],
       ]);
+    case 'cash-monthly': {
+      const totals = (data.totals ?? {}) as AnyRow;
+      return metricRows([
+        ['Inicio de caja', totals.firstOpening],
+        ['Ganancia neta', totals.netFlow],
+        ['Ingresos', totals.incomeTotal],
+        ['Egresos', totals.expenseTotal],
+        ['Acumulado final', totals.finalBalance],
+      ]);
+    }
     case 'sales-full': {
       const s = (data.summary ?? {}) as AnyRow;
       return metricRows([
@@ -958,6 +974,15 @@ function summaryRows(report: ReportKey, data: AnyRow) {
       return metricRows([['Productos distintos', normalizeRows(data.rows).length]]);
     case 'product-sales-by-user':
       return metricRows([['Filas', normalizeRows(data.rows).length]]);
+    case 'product-profit': {
+      const totals = (data.totals ?? {}) as AnyRow;
+      return metricRows([
+        ['Ingresos', totals.revenueTotal],
+        ['Costo total', totals.costTotal],
+        ['Ganancia total', totals.profitTotal],
+        ['Margen global', totals.marginPct],
+      ]);
+    }
     case 'inventory':
       return metricRows([
         ['Pérdidas', data.lossCount],
