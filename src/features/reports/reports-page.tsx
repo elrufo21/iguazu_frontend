@@ -36,6 +36,8 @@ import { normalizeRows } from '../shared/resource-save';
 type ReportKey =
   | 'cash-summary'
   | 'cash-monthly'
+  | 'room-income'
+  | 'expenses'
   | 'sales-full'
   | 'occupancy'
   | 'product-sales'
@@ -50,14 +52,17 @@ type ReportDef = { value: ReportKey; label: string; icon: LucideIcon };
 const reports: ReportDef[] = [
   { value: 'cash-summary', label: 'Cierre de caja', icon: Wallet },
   { value: 'cash-monthly', label: 'Caja mensual', icon: CalendarRange },
+  { value: 'room-income', label: 'Habitaciones', icon: BedDouble },
+  { value: 'product-profit', label: 'Ganancia por productos', icon: Percent },
+  { value: 'expenses', label: 'Egresos', icon: Wallet },
   { value: 'sales-full', label: 'Ventas e ingresos', icon: TrendingUp },
   { value: 'occupancy', label: 'Ocupación', icon: BedDouble },
   { value: 'product-sales', label: 'Productos vendidos', icon: Package },
   { value: 'product-sales-by-user', label: 'Productos por usuario', icon: Users },
-  { value: 'product-profit', label: 'Ganancia de productos', icon: Percent },
   { value: 'inventory', label: 'Inventario y pérdidas', icon: Boxes },
   { value: 'staff', label: 'Planilla de personal', icon: Users },
 ];
+const sectionExportReports: ReportKey[] = ['room-income', 'product-profit', 'expenses'];
 
 const today = new Date();
 const defaultFrom = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -72,6 +77,7 @@ export function ReportsPage() {
   const data = (query.data ?? {}) as AnyRow;
   const selectedReport = reports.find((item) => item.value === report);
   const canExport = !query.isLoading && !query.isError && Boolean(query.data);
+  const useSectionExports = sectionExportReports.includes(report);
   const exportBaseName = `reporte-${report}-${from}-${to}`;
 
   return (
@@ -99,30 +105,39 @@ export function ReportsPage() {
           <Field label="Hasta">
             <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           </Field>
-          <Button
-            className="self-end"
-            variant="outline"
-            disabled={!canExport}
-            onClick={() => void downloadPdf(selectedReport?.label ?? 'Reporte', report, from, to, data, exportBaseName)}
-          >
-            <FileText className="h-4 w-4" />
-            PDF
-          </Button>
-          <Button
-            className="self-end"
-            variant="outline"
-            disabled={!canExport}
-            onClick={() => void downloadExcel(selectedReport?.label ?? 'Reporte', report, data, exportBaseName)}
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            Excel
-          </Button>
+          {!useSectionExports && (
+            <>
+              <Button
+                className="self-end"
+                variant="outline"
+                disabled={!canExport}
+                onClick={() => void downloadPdf(selectedReport?.label ?? 'Reporte', report, from, to, data, exportBaseName)}
+              >
+                <FileText className="h-4 w-4" />
+                PDF
+              </Button>
+              <Button
+                className="self-end"
+                variant="outline"
+                disabled={!canExport}
+                onClick={() => void downloadExcel(selectedReport?.label ?? 'Reporte', report, data, exportBaseName, `${from} al ${to}`)}
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Excel
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
       {query.isLoading && <Card className="grid min-h-48 place-items-center p-6 text-sm text-muted-foreground">Cargando reporte...</Card>}
       {query.isError && <Card className="grid min-h-48 place-items-center p-6 text-sm text-red-700">{errorMessage(query.error)}</Card>}
-      {!query.isLoading && !query.isError && <ReportBody report={report} data={data} />}
+      {!query.isLoading && !query.isError && (
+        <>
+          <p className="text-sm font-medium text-muted-foreground">Periodo: {from} al {to}</p>
+          <ReportBody report={report} data={data} />
+        </>
+      )}
     </section>
   );
 }
@@ -136,6 +151,10 @@ function ReportBody({ report, data }: { report: ReportKey; data: AnyRow }) {
       return <CashSummaryReport data={data} />;
     case 'cash-monthly':
       return <CashMonthlyReport data={data} />;
+    case 'room-income':
+      return <RoomIncomeReport data={data} />;
+    case 'expenses':
+      return <ExpensesReport data={data} />;
     case 'sales-full':
       return <SalesFullReport data={data} />;
     case 'occupancy':
@@ -258,6 +277,112 @@ function CashSummaryReport({ data }: { data: AnyRow }) {
   );
 }
 
+function RoomIncomeReport({ data }: { data: AnyRow }) {
+  const totals = (data.totals ?? {}) as AnyRow;
+  const summaryColumns = ['roomType', 'realPrice', 'count', 'realIncome'];
+  const detailColumns = ['createdAt', 'saleId', 'room', 'roomType', 'priceType', 'quantity', 'customer', 'workShift', 'user', 'realPrice', 'realIncome'];
+  const summaryRows = withTotalRow(normalizeRows(data.rows), { roomType: 'TOTAL', count: totals.count, realIncome: totals.realIncome });
+  const detailRows = withTotalRow(normalizeRows(data.details), { roomType: 'TOTAL', quantity: totals.count, realIncome: totals.realIncome });
+  return (
+    <div className="space-y-5">
+      <KpiGrid>
+        <KpiCard label="Alquileres" value={totals.count} tone="blue" />
+        <KpiCard label="Ingreso real total" value={money(totals.realIncome)} tone="green" />
+      </KpiGrid>
+
+      <SectionHeader
+        title="Resumen por tipo de habitación"
+        rows={summaryRows}
+        columns={summaryColumns}
+        range={rangeLabel(data)}
+        fileNameBase={`habitaciones-resumen-${rangeSuffix(data)}`}
+      />
+      <SimpleTable
+        rows={summaryRows}
+        columns={summaryColumns}
+        moneyCols={['realPrice', 'realIncome']}
+      />
+
+      <SectionHeader
+        title="Detalle real de habitaciones vendidas"
+        rows={detailRows}
+        columns={detailColumns}
+        range={rangeLabel(data)}
+        fileNameBase={`habitaciones-detalle-${rangeSuffix(data)}`}
+      />
+      <SimpleTable
+        rows={detailRows}
+        columns={detailColumns}
+        moneyCols={['realPrice', 'realIncome']}
+        dateCols={['createdAt']}
+      />
+    </div>
+  );
+}
+
+function ExpensesReport({ data }: { data: AnyRow }) {
+  const totals = (data.totals ?? {}) as AnyRow;
+  const byUserColumns = ['user', 'count', 'total'];
+  const byCategoryColumns = ['category', 'count', 'total'];
+  const detailColumns = ['occurredAt', 'cashShiftId', 'category', 'paymentMethod', 'amount', 'user', 'cashOpenedBy', 'description'];
+  const byUserRows = withTotalRow(normalizeRows(data.byUser), { user: 'TOTAL', count: totals.count, total: totals.amount });
+  const byCategoryRows = withTotalRow(normalizeRows(data.byCategory), { category: 'TOTAL', count: totals.count, total: totals.amount });
+  const detailRows = withTotalRow(normalizeRows(data.rows), { category: 'TOTAL', amount: totals.amount });
+  return (
+    <div className="space-y-5">
+      <KpiGrid>
+        <KpiCard label="Egresos" value={totals.count} tone="amber" />
+        <KpiCard label="Total egresado" value={money(totals.amount)} tone="red" />
+      </KpiGrid>
+
+      <SectionHeader
+        title="Egresos por usuario"
+        rows={byUserRows}
+        columns={byUserColumns}
+        range={rangeLabel(data)}
+        fileNameBase={`egresos-por-usuario-${rangeSuffix(data)}`}
+      />
+      <SimpleTable
+        rows={byUserRows}
+        columns={byUserColumns}
+        moneyCols={['total']}
+      />
+
+      <SectionHeader
+        title="Egresos por categoría"
+        rows={byCategoryRows}
+        columns={byCategoryColumns}
+        range={rangeLabel(data)}
+        fileNameBase={`egresos-por-categoria-${rangeSuffix(data)}`}
+      />
+      <SimpleTable
+        rows={byCategoryRows}
+        columns={byCategoryColumns}
+        moneyCols={['total']}
+        renderCol={(col, value) => col === 'category' ? <Badge tone="amber">{valueLabel(value)}</Badge> : undefined}
+      />
+
+      <SectionHeader
+        title="Detalle real de egresos"
+        rows={detailRows}
+        columns={detailColumns}
+        range={rangeLabel(data)}
+        fileNameBase={`egresos-detalle-${rangeSuffix(data)}`}
+      />
+      <SimpleTable
+        rows={detailRows}
+        columns={detailColumns}
+        moneyCols={['amount']}
+        dateCols={['occurredAt']}
+        renderCol={(col, value) => {
+          if (col === 'category' || col === 'paymentMethod') return <Badge tone="slate">{valueLabel(value)}</Badge>;
+          return undefined;
+        }}
+      />
+    </div>
+  );
+}
+
 function SettledBadge({ row }: { row: AnyRow }) {
   const diff = Number(row.difference ?? 0);
   if (diff === 0) return <Badge tone="green">Cuadró</Badge>;
@@ -357,8 +482,8 @@ function SalesFullReport({ data }: { data: AnyRow }) {
       <SectionTitle>Ingresos por tipo de habitación</SectionTitle>
       <SimpleTable
         rows={normalizeRows(data.incomeByRoomType)}
-        columns={['roomType', 'count', 'total']}
-        moneyCols={['total']}
+        columns={['roomType', 'count', 'realIncome', 'averagePrice']}
+        moneyCols={['realIncome', 'averagePrice']}
       />
 
       <SectionTitle>Desglose por tipo de ítem</SectionTitle>
@@ -438,6 +563,7 @@ function OccupancyReport({ data }: { data: AnyRow }) {
 // ============================================================
 function ProductSalesReport({ data }: { data: AnyRow }) {
   const rows = normalizeRows(data.rows);
+  const priceRows = normalizeRows(data.priceRows);
   const totalSold = rows.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0);
   const totalAmount = rows.reduce((sum, row) => sum + Number(row.total ?? 0), 0);
 
@@ -445,6 +571,7 @@ function ProductSalesReport({ data }: { data: AnyRow }) {
     { header: 'Producto', accessor: 'product' },
     { header: 'Unidad', accessor: 'unit' },
     { header: 'Cantidad', accessor: 'quantity' },
+    { header: 'Precio real prom.', accessor: 'realSalePrice', render: (v) => money(Number(v ?? 0)) },
     { header: 'Total', accessor: 'total', render: (v) => money(Number(v ?? 0)) },
     { header: 'Costo', accessor: 'costTotal', render: (v) => money(Number(v ?? 0)) },
     { header: 'Ganancia', accessor: 'profitTotal', render: (v) => money(Number(v ?? 0)) },
@@ -459,6 +586,12 @@ function ProductSalesReport({ data }: { data: AnyRow }) {
       },
     },
   ];
+  const priceColumns: AppColumn[] = [
+    { header: 'Producto', accessor: 'product' },
+    { header: 'Precio vendido', accessor: 'unitPrice', render: (v, row) => row._isTotal ? '-' : money(Number(v ?? 0)) },
+    { header: 'Cantidad', accessor: 'quantity' },
+    { header: 'Ingreso real', accessor: 'total', render: (v) => money(Number(v ?? 0)) },
+  ];
 
   return (
     <div className="space-y-5">
@@ -469,6 +602,9 @@ function ProductSalesReport({ data }: { data: AnyRow }) {
       </KpiGrid>
 
       <DataTable data={rows} columns={columns} />
+
+      <SectionTitle>Precios reales usados</SectionTitle>
+      <DataTable data={priceRows} columns={priceColumns} />
     </div>
   );
 }
@@ -515,6 +651,15 @@ function CashMonthlyReport({ data }: { data: AnyRow }) {
       </KpiGrid>
 
       <DataTable data={months} columns={columns} />
+
+      <SectionTitle>Egresos por mes</SectionTitle>
+      <SimpleTable
+        rows={normalizeRows(data.expensesByMonth)}
+        columns={['label', 'category', 'count', 'total']}
+        moneyCols={['total']}
+        emptyMessage="Sin egresos en el periodo."
+        renderCol={(col, value) => col === 'category' ? <Badge tone="amber">{valueLabel(value)}</Badge> : undefined}
+      />
     </div>
   );
 }
@@ -524,17 +669,42 @@ function CashMonthlyReport({ data }: { data: AnyRow }) {
 // ============================================================
 function ProductProfitReport({ data }: { data: AnyRow }) {
   const rows = normalizeRows(data.products);
+  const priceRows = normalizeRows(data.priceRows);
+  const details = normalizeRows(data.details);
   const totals = (data.totals ?? {}) as AnyRow;
+  const summaryRows = withTotalRow(rows, {
+    name: 'TOTAL',
+    quantitySold: rows.reduce((sum, row) => sum + Number(row.quantitySold ?? 0), 0),
+    revenue: totals.revenueTotal,
+    costTotal: totals.costTotal,
+    profit: totals.profitTotal,
+  });
+  const priceTotalRows = withTotalRow(priceRows, {
+    product: 'TOTAL',
+    quantity: priceRows.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0),
+    revenue: totals.revenueTotal,
+    costTotal: totals.costTotal,
+    profit: totals.profitTotal,
+  });
+  const detailRows = withTotalRow(details, {
+    product: 'TOTAL',
+    quantity: details.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0),
+    revenue: totals.revenueTotal,
+    costTotal: totals.costTotal,
+    profit: totals.profitTotal,
+  });
 
   const marginTone = (pct: number): Tone => (pct >= 30 ? 'green' : pct >= 10 ? 'amber' : 'red');
 
+  const summaryAccessors = ['name', 'unit', 'quantitySold', 'revenue', 'unitCost', 'costTotal', 'profit', 'marginPct', 'stock'];
+  const priceAccessors = ['product', 'unitPrice', 'quantity', 'revenue', 'costTotal', 'profit'];
+  const detailAccessors = ['createdAt', 'saleId', 'product', 'quantity', 'unitPrice', 'revenue', 'costTotal', 'profit', 'workShift', 'user', 'customer'];
   const columns: AppColumn[] = [
     { header: 'Producto', accessor: 'name' },
     { header: 'Unidad', accessor: 'unit' },
     { header: 'Vendidos', accessor: 'quantitySold' },
-    { header: 'Ingreso', accessor: 'revenue', render: (v) => money(Number(v ?? 0)) },
-    { header: 'Costo unit.', accessor: 'unitCost', render: (v) => money(Number(v ?? 0)) },
-    { header: 'Precio venta', accessor: 'unitPrice', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Ingreso real', accessor: 'revenue', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Costo unit.', accessor: 'unitCost', render: (v, row) => row._isTotal ? '-' : money(Number(v ?? 0)) },
     { header: 'Costo total', accessor: 'costTotal', render: (v) => money(Number(v ?? 0)) },
     {
       header: 'Ganancia',
@@ -544,9 +714,30 @@ function ProductProfitReport({ data }: { data: AnyRow }) {
     {
       header: 'Margen %',
       accessor: 'marginPct',
-      render: (v) => <Badge tone={marginTone(Number(v ?? 0))}>{Number(v ?? 0).toFixed(1)}%</Badge>,
+      render: (v, row) => row._isTotal ? '-' : <Badge tone={marginTone(Number(v ?? 0))}>{Number(v ?? 0).toFixed(1)}%</Badge>,
     },
-    { header: 'Stock', accessor: 'stock' },
+    { header: 'Stock', accessor: 'stock', render: (v, row) => row._isTotal ? '-' : String(v ?? '-') },
+  ];
+  const priceColumns: AppColumn[] = [
+    { header: 'Producto', accessor: 'product' },
+    { header: 'Precio vendido', accessor: 'unitPrice', render: (v, row) => row._isTotal ? '-' : money(Number(v ?? 0)) },
+    { header: 'Cantidad', accessor: 'quantity' },
+    { header: 'Ingreso real', accessor: 'revenue', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Costo total', accessor: 'costTotal', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Ganancia', accessor: 'profit', render: (v) => money(Number(v ?? 0)) },
+  ];
+  const detailColumns: AppColumn[] = [
+    { header: 'Fecha', accessor: 'createdAt', render: (v) => dateTime(v) },
+    { header: 'Venta', accessor: 'saleId' },
+    { header: 'Producto', accessor: 'product' },
+    { header: 'Cantidad', accessor: 'quantity' },
+    { header: 'Precio vendido', accessor: 'unitPrice', render: (v, row) => row._isTotal ? '-' : money(Number(v ?? 0)) },
+    { header: 'Ingreso real', accessor: 'revenue', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Costo total', accessor: 'costTotal', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Ganancia', accessor: 'profit', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Turno', accessor: 'workShift' },
+    { header: 'Usuario', accessor: 'user' },
+    { header: 'Cliente', accessor: 'customer' },
   ];
 
   return (
@@ -558,7 +749,32 @@ function ProductProfitReport({ data }: { data: AnyRow }) {
         <KpiCard label="Margen global" value={`${Number(totals.marginPct ?? 0).toFixed(1)}%`} tone={marginTone(Number(totals.marginPct ?? 0))} />
       </KpiGrid>
 
-      <DataTable data={rows} columns={columns} />
+      <SectionHeader
+        title="Resumen por producto"
+        rows={summaryRows}
+        columns={summaryAccessors}
+        range={rangeLabel(data)}
+        fileNameBase={`productos-resumen-${rangeSuffix(data)}`}
+      />
+      <DataTable data={summaryRows} columns={columns} />
+
+      <SectionHeader
+        title="Ganancia por precio vendido"
+        rows={priceTotalRows}
+        columns={priceAccessors}
+        range={rangeLabel(data)}
+        fileNameBase={`productos-precios-${rangeSuffix(data)}`}
+      />
+      <DataTable data={priceTotalRows} columns={priceColumns} />
+
+      <SectionHeader
+        title="Detalle real de ventas de productos"
+        rows={detailRows}
+        columns={detailAccessors}
+        range={rangeLabel(data)}
+        fileNameBase={`productos-detalle-${rangeSuffix(data)}`}
+      />
+      <DataTable data={detailRows} columns={detailColumns} />
     </div>
   );
 }
@@ -717,6 +933,49 @@ function SectionTitle({ children }: { children: ReactNode }) {
   return <h2 className="text-lg font-semibold">{children}</h2>;
 }
 
+function SectionHeader({
+  title,
+  rows,
+  columns,
+  range,
+  fileNameBase,
+}: {
+  title: string;
+  rows: AnyRow[];
+  columns: string[];
+  range: string;
+  fileNameBase: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <SectionTitle>{title}</SectionTitle>
+        <p className="mt-1 text-xs font-medium text-muted-foreground">Periodo: {range}</p>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!rows.length}
+          onClick={() => void downloadRowsPdf(title, pickColumns(rows, columns), fileNameBase, range)}
+        >
+          <FileText className="h-4 w-4" />
+          PDF
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!rows.length}
+          onClick={() => void downloadRowsExcel(title, pickColumns(rows, columns), fileNameBase, range)}
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          Excel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function DifferenceBadge({ value }: { value: number }) {
   if (value === 0) return <Badge tone="green">Cuadra</Badge>;
   return <Badge tone={value < 0 ? 'red' : 'amber'}>{money(value)}</Badge>;
@@ -803,10 +1062,10 @@ function SimpleTable({
           </thead>
           <tbody>
             {rows.map((row, index) => (
-              <tr key={String(row.id ?? index)} className="border-t border-border">
+              <tr key={String(row.id ?? index)} className={`border-t border-border ${row._isTotal ? 'bg-muted font-semibold' : ''}`}>
                 {columns.map((column) => (
                   <td key={column} className="px-4 py-3">
-                    {renderCol?.(column, row[column], row) ?? format(row[column], column, moneyCols, dateCols)}
+                    {renderCol?.(column, row[column], row) ?? format(row[column], column, moneyCols, dateCols, row)}
                   </td>
                 ))}
                 {hasActions && (
@@ -821,7 +1080,8 @@ function SimpleTable({
   );
 }
 
-function format(value: unknown, column: string, moneyCols: string[], dateCols: string[]) {
+function format(value: unknown, column: string, moneyCols: string[], dateCols: string[], row?: AnyRow) {
+  if (row?._isTotal && (value === undefined || value === null)) return '';
   if (moneyCols.includes(column)) return money(Number(value ?? 0));
   if (dateCols.includes(column)) return dateTime(value);
   if (typeof value === 'string') return valueLabel(value);
@@ -831,7 +1091,7 @@ function format(value: unknown, column: string, moneyCols: string[], dateCols: s
 // ============================================================
 // Exportación PDF / Excel
 // ============================================================
-async function downloadExcel(title: string, report: ReportKey, data: AnyRow, fileName: string) {
+async function downloadExcel(title: string, report: ReportKey, data: AnyRow, fileName: string, range: string) {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
   const sections = buildExportSections(report, data);
   const sheets = sections.map((section, index) => {
@@ -840,12 +1100,32 @@ async function downloadExcel(title: string, report: ReportKey, data: AnyRow, fil
     return {
       sheet: sheetName(`${title} - ${section.title}`, index),
       data: [
+        [{ value: 'Periodo', fontWeight: 'bold' as const }, { value: range }],
+        [{ value: '' }],
         headers.map((value) => ({ value: columnLabel(value), fontWeight: 'bold' as const })),
         ...rows.map((row) => headers.map((header) => excelValue(row[header]))),
       ],
     };
   });
   const file = await writeXlsxFile(sheets as any);
+  await file.toFile(`${fileName}.xlsx`);
+}
+
+async function downloadRowsExcel(title: string, rows: Record<string, unknown>[], fileName: string, range: string) {
+  const { default: writeXlsxFile } = await import('write-excel-file/browser');
+  const dataRows = rows.length ? rows : [{ Mensaje: 'Sin datos' }];
+  const headers = Object.keys(dataRows[0] ?? {});
+  const file = await writeXlsxFile([
+    {
+      sheet: sheetName(title, 0),
+      data: [
+        [{ value: 'Periodo', fontWeight: 'bold' as const }, { value: range }],
+        [{ value: '' }],
+        headers.map((value) => ({ value: columnLabel(value), fontWeight: 'bold' as const })),
+        ...dataRows.map((row) => headers.map((header) => excelValue(row[header]))),
+      ],
+    },
+  ] as any);
   await file.toFile(`${fileName}.xlsx`);
 }
 
@@ -888,6 +1168,29 @@ async function downloadPdf(title: string, _report: ReportKey, from: string, to: 
   doc.save(`${fileName}.pdf`);
 }
 
+async function downloadRowsPdf(title: string, rows: Record<string, unknown>[], fileName: string, range: string) {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  doc.setFontSize(16);
+  doc.text(title, 40, 42);
+  doc.setFontSize(10);
+  doc.text(`Periodo: ${range}`, 40, 60);
+  const dataRows = rows.length ? rows : [{ Mensaje: 'Sin datos' }];
+  const headers = Object.keys(dataRows[0] ?? {});
+  autoTable(doc, {
+    startY: 82,
+    head: [headers.map(columnLabel)],
+    body: dataRows.map((row) => headers.map((header) => printable(row[header]))),
+    styles: { fontSize: 8, cellPadding: 4 },
+    headStyles: { fillColor: [16, 35, 31] },
+    margin: { left: 40, right: 40 },
+  });
+  doc.save(`${fileName}.pdf`);
+}
+
 function buildExportSections(report: ReportKey, data: AnyRow): ExportSection[] {
   const sections: ExportSection[] = [{ title: 'Resumen', rows: summaryRows(report, data) }];
   switch (report) {
@@ -896,7 +1199,18 @@ function buildExportSections(report: ReportKey, data: AnyRow): ExportSection[] {
       sections.push({ title: 'Movimientos de caja', rows: normalizeRows(data.movements) });
       break;
     case 'cash-monthly':
-      sections.push({ title: 'Meses', rows: normalizeRows(data.months) });
+      sections.push({ title: 'Meses', rows: cashMonthRows(data.months) });
+      sections.push({ title: 'Egresos por mes', rows: normalizeRows(data.expensesByMonth) });
+      sections.push({ title: 'Ingresos por mes', rows: normalizeRows(data.incomeByMonth) });
+      break;
+    case 'room-income':
+      sections.push({ title: 'Resumen por tipo de habitación', rows: normalizeRows(data.rows) });
+      sections.push({ title: 'Detalle real de habitaciones vendidas', rows: normalizeRows(data.details) });
+      break;
+    case 'expenses':
+      sections.push({ title: 'Egresos por usuario', rows: normalizeRows(data.byUser) });
+      sections.push({ title: 'Egresos por categoría', rows: normalizeRows(data.byCategory) });
+      sections.push({ title: 'Detalle real de egresos', rows: normalizeRows(data.rows) });
       break;
     case 'sales-full':
       sections.push({ title: 'Ingresos por tipo de habitación', rows: normalizeRows(data.incomeByRoomType) });
@@ -910,12 +1224,15 @@ function buildExportSections(report: ReportKey, data: AnyRow): ExportSection[] {
       break;
     case 'product-sales':
       sections.push({ title: 'Productos vendidos', rows: normalizeRows(data.rows) });
+      sections.push({ title: 'Precios reales usados', rows: normalizeRows(data.priceRows) });
       break;
     case 'product-sales-by-user':
       sections.push({ title: 'Productos por usuario', rows: normalizeRows(data.rows) });
       break;
     case 'product-profit':
-      sections.push({ title: 'Productos', rows: normalizeRows(data.products) });
+      sections.push({ title: 'Resumen por producto', rows: normalizeRows(data.products) });
+      sections.push({ title: 'Ganancia por precio vendido', rows: normalizeRows(data.priceRows) });
+      sections.push({ title: 'Detalle real de ventas de productos', rows: normalizeRows(data.details) });
       break;
     case 'inventory':
       sections.push({ title: 'Stock bajo', rows: normalizeRows(data.lowStock) });
@@ -951,6 +1268,21 @@ function summaryRows(report: ReportKey, data: AnyRow): Record<string, unknown>[]
         ['Acumulado final', totals.finalBalance],
       ]);
     }
+    case 'room-income': {
+      const totals = (data.totals ?? {}) as AnyRow;
+      return metricRows([
+        ['Alquileres', totals.count],
+        ['Ingreso real total', totals.realIncome],
+        ['Precio promedio', totals.averagePrice],
+      ]);
+    }
+    case 'expenses': {
+      const totals = (data.totals ?? {}) as AnyRow;
+      return metricRows([
+        ['Egresos', totals.count],
+        ['Total egresado', totals.amount],
+      ]);
+    }
     case 'sales-full': {
       const s = (data.summary ?? {}) as AnyRow;
       return metricRows([
@@ -971,7 +1303,11 @@ function summaryRows(report: ReportKey, data: AnyRow): Record<string, unknown>[]
         ['Promedio horas', data.averageHours],
       ]);
     case 'product-sales':
-      return metricRows([['Productos distintos', normalizeRows(data.rows).length]]);
+      return metricRows([
+        ['Productos distintos', normalizeRows(data.rows).length],
+        ['Unidades vendidas', normalizeRows(data.rows).reduce((sum, row) => sum + Number(row.quantity ?? 0), 0)],
+        ['Ingreso real', normalizeRows(data.rows).reduce((sum, row) => sum + Number(row.total ?? 0), 0)],
+      ]);
     case 'product-sales-by-user':
       return metricRows([['Filas', normalizeRows(data.rows).length]]);
     case 'product-profit': {
@@ -1013,9 +1349,40 @@ function objectRows(data?: unknown) {
   }));
 }
 
+function pickColumns(rows: AnyRow[], columns: string[]) {
+  return rows.map((row) =>
+    Object.fromEntries(columns.map((column) => [column, row[column]])),
+  );
+}
+
+function withTotalRow(rows: AnyRow[], total: AnyRow) {
+  return rows.length ? [...rows, { ...total, _isTotal: true }] : rows;
+}
+
+function cashMonthRows(data?: unknown) {
+  return normalizeRows(data).map(({ incomeByCategory, expensesByCategory, ...row }) => row);
+}
+
+function rangeLabel(data: AnyRow) {
+  const range = asRow(data.range);
+  return `${datePart(range.from)} al ${datePart(range.to)}`;
+}
+
+function rangeSuffix(data: AnyRow) {
+  const range = asRow(data.range);
+  return `${datePart(range.from)}-${datePart(range.to)}`;
+}
+
+function datePart(value: unknown) {
+  return String(value ?? '').slice(0, 10) || 'sin-fecha';
+}
+
 function printable(value: unknown) {
   if (value instanceof Date) return dateTime(value);
-  if (typeof value === 'string') return valueLabel(value);
+  if (typeof value === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return dateTime(value);
+    return valueLabel(value);
+  }
   if (typeof value === 'object' && value !== null) return JSON.stringify(value);
   return String(value ?? '');
 }
@@ -1025,7 +1392,8 @@ function sheetName(title: string, index: number) {
 }
 
 function excelValue(value: unknown) {
-  if (value instanceof Date) return value;
+  if (value instanceof Date) return dateTime(value);
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) return dateTime(value);
   if (typeof value === 'string') return valueLabel(value);
   if (typeof value === 'number' || typeof value === 'boolean') return value;
   if (value === null || value === undefined) return '';

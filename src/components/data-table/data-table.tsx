@@ -95,7 +95,7 @@ export function DataTable({
           </thead>
           <tbody>
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="border-t border-border">
+              <tr key={row.id} className={`border-t border-border ${row.original._isTotal ? 'bg-muted font-semibold' : ''}`}>
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id} className="px-4 py-3 align-middle">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
