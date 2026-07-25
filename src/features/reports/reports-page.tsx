@@ -2,9 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BedDouble,
   Boxes,
+  CalendarRange,
   FileSpreadsheet,
   FileText,
   Package,
+  Percent,
   TrendingUp,
   Users,
   Wallet,
@@ -33,10 +35,12 @@ import { normalizeRows } from '../shared/resource-save';
 
 type ReportKey =
   | 'cash-summary'
+  | 'cash-monthly'
   | 'sales-full'
   | 'occupancy'
   | 'product-sales'
   | 'product-sales-by-user'
+  | 'product-profit'
   | 'inventory'
   | 'staff';
 
@@ -45,10 +49,12 @@ type ReportDef = { value: ReportKey; label: string; icon: LucideIcon };
 // Reportes definitivos para un hotel pequeño (~10 clientes/día).
 const reports: ReportDef[] = [
   { value: 'cash-summary', label: 'Cierre de caja', icon: Wallet },
+  { value: 'cash-monthly', label: 'Caja mensual', icon: CalendarRange },
   { value: 'sales-full', label: 'Ventas e ingresos', icon: TrendingUp },
   { value: 'occupancy', label: 'Ocupación', icon: BedDouble },
   { value: 'product-sales', label: 'Productos vendidos', icon: Package },
   { value: 'product-sales-by-user', label: 'Productos por usuario', icon: Users },
+  { value: 'product-profit', label: 'Ganancia de productos', icon: Percent },
   { value: 'inventory', label: 'Inventario y pérdidas', icon: Boxes },
   { value: 'staff', label: 'Planilla de personal', icon: Users },
 ];
@@ -128,6 +134,8 @@ function ReportBody({ report, data }: { report: ReportKey; data: AnyRow }) {
   switch (report) {
     case 'cash-summary':
       return <CashSummaryReport data={data} />;
+    case 'cash-monthly':
+      return <CashMonthlyReport data={data} />;
     case 'sales-full':
       return <SalesFullReport data={data} />;
     case 'occupancy':
@@ -136,6 +144,8 @@ function ReportBody({ report, data }: { report: ReportKey; data: AnyRow }) {
       return <ProductSalesReport data={data} />;
     case 'product-sales-by-user':
       return <ProductSalesByUserReport data={data} />;
+    case 'product-profit':
+      return <ProductProfitReport data={data} />;
     case 'inventory':
       return <InventoryReport data={data} />;
     case 'staff':
@@ -456,6 +466,96 @@ function ProductSalesReport({ data }: { data: AnyRow }) {
         <KpiCard label="Productos vendidos" value={totalSold} tone="blue" />
         <KpiCard label="Monto total" value={money(totalAmount)} tone="green" />
         <KpiCard label="Productos distintos" value={rows.length} tone="slate" />
+      </KpiGrid>
+
+      <DataTable data={rows} columns={columns} />
+    </div>
+  );
+}
+
+// ============================================================
+// 4b. Caja mensual (acumulado por mes)
+// ============================================================
+function CashMonthlyReport({ data }: { data: AnyRow }) {
+  const months = normalizeRows(data.months);
+  const totals = (data.totals ?? {}) as AnyRow;
+
+  const columns: AppColumn[] = [
+    { header: 'Mes', accessor: 'label' },
+    {
+      header: 'Inicio de caja',
+      accessor: 'firstOpening',
+      render: (v) => money(Number(v ?? 0)),
+    },
+    { header: 'Ingresos', accessor: 'incomeTotal', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Egresos', accessor: 'expenseTotal', render: (v) => money(Number(v ?? 0)) },
+    {
+      header: 'Ganancia neta',
+      accessor: 'netFlow',
+      render: (v) => <Badge tone={Number(v ?? 0) >= 0 ? 'green' : 'red'}>{money(Number(v ?? 0))}</Badge>,
+    },
+    { header: 'Efectivo entró', accessor: 'cashIn', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Efectivo salió', accessor: 'cashOut', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Turnos', accessor: 'shiftCount' },
+    {
+      header: 'Saldo del mes',
+      accessor: 'balance',
+      render: (v) => <Badge tone={Number(v ?? 0) >= 0 ? 'blue' : 'red'}>{money(Number(v ?? 0))}</Badge>,
+    },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <KpiGrid>
+        <KpiCard label="Inicio de caja" value={money(totals.firstOpening)} tone="blue" />
+        <KpiCard label="Ganancia neta" value={money(totals.netFlow)} tone="green" />
+        <KpiCard label="Ingresos" value={money(totals.incomeTotal)} tone="slate" />
+        <KpiCard label="Egresos" value={money(totals.expenseTotal)} tone="red" />
+        <KpiCard label="Acumulado final" value={money(totals.finalBalance)} tone="amber" />
+      </KpiGrid>
+
+      <DataTable data={months} columns={columns} />
+    </div>
+  );
+}
+
+// ============================================================
+// 4c. Ganancia de productos (compra vs venta)
+// ============================================================
+function ProductProfitReport({ data }: { data: AnyRow }) {
+  const rows = normalizeRows(data.products);
+  const totals = (data.totals ?? {}) as AnyRow;
+
+  const marginTone = (pct: number): Tone => (pct >= 30 ? 'green' : pct >= 10 ? 'amber' : 'red');
+
+  const columns: AppColumn[] = [
+    { header: 'Producto', accessor: 'name' },
+    { header: 'Unidad', accessor: 'unit' },
+    { header: 'Vendidos', accessor: 'quantitySold' },
+    { header: 'Ingreso', accessor: 'revenue', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Costo unit.', accessor: 'unitCost', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Precio venta', accessor: 'unitPrice', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Costo total', accessor: 'costTotal', render: (v) => money(Number(v ?? 0)) },
+    {
+      header: 'Ganancia',
+      accessor: 'profit',
+      render: (v) => <Badge tone={Number(v ?? 0) >= 0 ? 'green' : 'red'}>{money(Number(v ?? 0))}</Badge>,
+    },
+    {
+      header: 'Margen %',
+      accessor: 'marginPct',
+      render: (v) => <Badge tone={marginTone(Number(v ?? 0))}>{Number(v ?? 0).toFixed(1)}%</Badge>,
+    },
+    { header: 'Stock', accessor: 'stock' },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <KpiGrid>
+        <KpiCard label="Ingresos" value={money(totals.revenueTotal)} tone="green" />
+        <KpiCard label="Costo total" value={money(totals.costTotal)} tone="red" />
+        <KpiCard label="Ganancia total" value={money(totals.profitTotal)} tone="blue" />
+        <KpiCard label="Margen global" value={`${Number(totals.marginPct ?? 0).toFixed(1)}%`} tone={marginTone(Number(totals.marginPct ?? 0))} />
       </KpiGrid>
 
       <DataTable data={rows} columns={columns} />
