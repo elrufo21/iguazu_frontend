@@ -316,7 +316,13 @@ function ClosureCard({
           </Badge>
         </div>
 
-        <ClosureMoneyPanel closure={closure} summary={summary} />
+        <div className="grid gap-2 rounded-md bg-muted/50 p-3 text-sm sm:grid-cols-3">
+          <Meta label="Turno" value={shiftLabel(summary?.openedAt)} />
+          <Meta label="Abrió" value={String(summary?.openedBy ?? '-')} />
+          <Meta label="Cerró" value={String(summary?.closedBy ?? '-')} />
+        </div>
+
+        <ClosureMoneyPanel closure={closure} summary={summary} details={details} />
 
         {notes && (
           <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
@@ -555,10 +561,22 @@ function FormulaLine({ summary }: { summary: AnyRow | undefined }) {
   );
 }
 
-function ClosureMoneyPanel({ closure, summary }: { closure: AnyRow; summary: AnyRow | undefined }) {
-  const totals = totalBreakdown(summary);
-  const expected = Number(closure.totalExpected ?? 0);
-  const counted = Number(closure.totalCounted ?? 0);
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function ClosureMoneyPanel({ closure, summary, details }: { closure: AnyRow; summary: AnyRow | undefined; details: AnyRow[] }) {
+  void closure;
+  const cashDetail = details.find((detail) => detail.paymentMethod === 'CASH');
+  const cashExpected = Number((summary?.expectedByMethod as AnyRow | undefined)?.CASH ?? cashDetail?.expectedAmount ?? 0);
+  const cash = methodBreakdown(summary, 'CASH', cashExpected);
+  const expected = Number(cashDetail?.expectedAmount ?? cash.expected);
+  const counted = Number(cashDetail?.countedAmount ?? 0);
   const countedPercent = expected > 0 ? Math.min(100, Math.max(0, (counted / expected) * 100)) : 0;
   const missingPercent = expected > 0 ? 100 - countedPercent : 0;
   return (
@@ -566,12 +584,12 @@ function ClosureMoneyPanel({ closure, summary }: { closure: AnyRow; summary: Any
       <div className="rounded-md bg-card p-4">
         <div className="grid items-center gap-4 sm:grid-cols-[1fr_auto_1fr]">
           <div>
-            <p className="text-xs font-medium text-muted-foreground">Debía haber</p>
+            <p className="text-xs font-medium text-muted-foreground">Debía haber sencillo</p>
             <p className="text-2xl font-bold">{money(expected)}</p>
           </div>
           <span className="hidden text-2xl text-muted-foreground sm:block">→</span>
           <div>
-            <p className="text-xs font-medium text-muted-foreground">Se contó</p>
+            <p className="text-xs font-medium text-muted-foreground">Sencillo contado</p>
             <p className="text-2xl font-bold">{money(counted)}</p>
           </div>
         </div>
@@ -581,14 +599,14 @@ function ClosureMoneyPanel({ closure, summary }: { closure: AnyRow; summary: Any
         </div>
       </div>
 
-      <p className="mt-4 text-sm font-semibold">Cómo se llegó a {money(expected)}</p>
+      <p className="mt-4 text-sm font-semibold">Cómo se llegó al sencillo esperado</p>
       <div className="mt-2 overflow-hidden rounded-md border border-border bg-card text-sm">
-        <MoneyRow label="Efectivo inicial" value={totals.opening} />
-        <MoneyRow label={`Ventas cobradas (${summary?.salesCount ?? 0})`} value={totals.sales} icon="plus" />
-        <MoneyRow label="Ingresos extra" value={totals.income} icon="plus" />
-        <MoneyRow label="Retiros y egresos" value={-(totals.withdrawals + totals.expenses)} icon="minus" />
+        <MoneyRow label="Efectivo inicial" value={cash.opening} />
+        <MoneyRow label="Ventas en efectivo" value={cash.sales} icon="plus" />
+        <MoneyRow label="Ingresos extra en efectivo" value={cash.income} icon="plus" />
+        <MoneyRow label="Retiros y egresos en efectivo" value={-(cash.withdrawals + cash.expenses)} icon="minus" />
         <div className="flex items-center justify-between bg-foreground px-3 py-3 font-semibold text-background">
-          <span>Total esperado</span>
+          <span>Sencillo esperado</span>
           <span>{money(expected)}</span>
         </div>
       </div>
