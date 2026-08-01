@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, CreditCard, Pencil, Save, WalletCards } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CreditCard, Minus, Pencil, Plus, Save, WalletCards } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '../../components/ui/badge';
@@ -23,6 +23,14 @@ const methods = [
   { value: 'PLIN', label: 'Plin' },
   { value: 'TRANSFER', label: 'Transferencia' },
 ];
+type MethodBreakdown = {
+  opening: number;
+  sales: number;
+  income: number;
+  withdrawals: number;
+  expenses: number;
+  expected: number;
+};
 
 export function CashClosuresPage() {
   const [counted, setCounted] = useState<Record<string, string>>({});
@@ -31,6 +39,7 @@ export function CashClosuresPage() {
   const [correctionCounted, setCorrectionCounted] = useState<Record<string, string>>({});
   const [correctionReason, setCorrectionReason] = useState('');
   const [openedDate, setOpenedDate] = useState('');
+  const [expandedClosureId, setExpandedClosureId] = useState<string | null>(null);
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const canCorrectClosures = user?.role === 'ADMIN';
@@ -149,6 +158,7 @@ export function CashClosuresPage() {
           ) : (
             <>
               <SummaryGrid summary={preview.data} difference={difference} countedTotal={countedTotal} />
+              <FormulaLine summary={preview.data} />
 
               <div className="grid gap-3 lg:grid-cols-5">
                 {methods.map((method) => {
@@ -210,6 +220,10 @@ export function CashClosuresPage() {
             closure={closure}
             canCorrect={canCorrectClosures && !closure.settled}
             onCorrect={() => openCorrection(closure)}
+            expanded={expandedClosureId === String(closure.id)}
+            onToggleExpanded={() =>
+              setExpandedClosureId((current) => (current === String(closure.id) ? null : String(closure.id)))
+            }
             canReviewEdits={canCorrectClosures}
             reviewingEditId={Number(reviewSaleEdit.variables?.auditLogId ?? 0)}
             onReviewEdit={(auditLogId, action) =>
@@ -242,11 +256,8 @@ function SummaryGrid({ summary, countedTotal, difference }: { summary: AnyRow | 
   const items = useMemo<Array<[string, string | number | undefined]>>(
     () => [
       ['Monto inicial', Number(summary?.openingAmount ?? 0)],
-      ['Abierta por', String(summary?.openedBy ?? '-')],
-      ['Cerrada por', String(summary?.closedBy ?? '-')],
-      ['Ventas del turno', `${summary?.salesCount ?? 0} (${money(Number(summary?.salesTotal ?? 0))})`],
-      ['Pendientes', `${summary?.pendingSalesCount ?? 0} (${money(Number(summary?.pendingSalesTotal ?? 0))})`],
-      ['Pérdidas', `${summary?.lossCount ?? 0} (${money(Number(summary?.lossTotal ?? 0))})`],
+      ['Ventas cobradas', Number(totalBreakdown(summary).sales)],
+      ['Retiros / egresos', Number(totalBreakdown(summary).withdrawals + totalBreakdown(summary).expenses)],
       ['Esperado', Number(summary?.totalExpected ?? 0)],
       ['Contado', countedTotal],
       ['Diferencia', difference],
@@ -255,7 +266,7 @@ function SummaryGrid({ summary, countedTotal, difference }: { summary: AnyRow | 
   );
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
       {items.map(([label, value]) => (
         <div key={String(label)} className="rounded-md border border-border p-3">
           <p className="text-xs text-muted-foreground">{label}</p>
@@ -270,6 +281,8 @@ function ClosureCard({
   closure,
   canCorrect,
   onCorrect,
+  expanded,
+  onToggleExpanded,
   canReviewEdits,
   reviewingEditId,
   onReviewEdit,
@@ -277,6 +290,8 @@ function ClosureCard({
   closure: AnyRow;
   canCorrect: boolean;
   onCorrect: () => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
   canReviewEdits: boolean;
   reviewingEditId: number;
   onReviewEdit: (auditLogId: number, action: 'penalty' | 'loss') => void;
@@ -293,26 +308,15 @@ function ClosureCard({
       <CardContent className="space-y-3 p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="font-semibold">Cierre #{String(closure.id)}</p>
-            <p className="text-sm text-muted-foreground">{dateTime(closure.createdAt)}</p>
-            <p className="text-xs text-muted-foreground">
-              Apertura: {dateTime(summary?.openedAt)} · {shiftLabel(summary?.openedAt)}
-            </p>
+            <p className="text-lg font-semibold">Cierre #{String(closure.id)} · {shiftLabel(summary?.openedAt)}</p>
+            <p className="text-sm text-muted-foreground">{closurePeriod(summary, closure)}</p>
           </div>
           <Badge tone={difference === 0 ? 'green' : difference < 0 ? 'red' : 'amber'}>
             {difference === 0 ? 'Cuadrada' : difference < 0 ? `Faltó ${money(Math.abs(difference))}` : `Sobró ${money(difference)}`}
           </Badge>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Mini label="Esperado" value={money(Number(closure.totalExpected ?? 0))} />
-          <Mini label="Abierta por" value={String((summary as AnyRow | undefined)?.openedBy ?? '-')} />
-          <Mini label="Cerrada por" value={String((summary as AnyRow | undefined)?.closedBy ?? '-')} />
-          <Mini label="Contado" value={money(Number(closure.totalCounted ?? 0))} />
-          <Mini label="Ventas" value={`${summary?.salesCount ?? 0} / ${money(Number(summary?.salesTotal ?? 0))}`} />
-          <Mini label="Pendientes" value={`${summary?.pendingSalesCount ?? 0} / ${money(Number(summary?.pendingSalesTotal ?? 0))}`} />
-          <Mini label="Pérdidas" value={`${summary?.lossCount ?? 0} / ${money(Number(summary?.lossTotal ?? 0))}`} />
-        </div>
+        <ClosureMoneyPanel closure={closure} summary={summary} />
 
         {notes && (
           <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
@@ -348,28 +352,33 @@ function ClosureCard({
           </div>
         )}
 
-        <div className="grid gap-2 md:grid-cols-5">
-          {details.map((detail) => (
-            <div key={String(detail.id)} className="rounded-md bg-muted p-2 text-xs">
-              <p className="flex items-center gap-1 font-semibold">
-                <CreditCard className="h-3.5 w-3.5" />
-                {valueLabel(detail.paymentMethod)}
-              </p>
-              <p>Esp. {money(Number(detail.expectedAmount ?? 0))}</p>
-              <p>Cont. {money(Number(detail.countedAmount ?? 0))}</p>
-              <p>Dif. {money(Number(detail.difference ?? 0))}</p>
-            </div>
-          ))}
-        </div>
+        {expanded && (
+          <div className="grid gap-2 md:grid-cols-5">
+            {details.map((detail) => (
+              <div key={String(detail.id)} className="rounded-md bg-muted p-2 text-xs">
+                <p className="flex items-center gap-1 font-semibold">
+                  <CreditCard className="h-3.5 w-3.5" />
+                  {valueLabel(detail.paymentMethod)}
+                </p>
+                <p>Esp. {money(Number(detail.expectedAmount ?? 0))}</p>
+                <p>Cont. {money(Number(detail.countedAmount ?? 0))}</p>
+                <p>Dif. {money(Number(detail.difference ?? 0))}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
-        {canCorrect && difference !== 0 && (
-          <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onToggleExpanded}>
+            {expanded ? 'Ocultar detalle' : 'Ver detalle'}
+          </Button>
+          {canCorrect && difference !== 0 && (
             <Button variant="outline" size="sm" onClick={onCorrect}>
               <Pencil className="h-4 w-4" />
               Corregir conteo
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -537,12 +546,94 @@ function CorrectCountsDialog({
   );
 }
 
-function Mini({ label, value }: { label: string; value: string }) {
+function FormulaLine({ summary }: { summary: AnyRow | undefined }) {
+  const totals = totalBreakdown(summary);
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-semibold">{value}</p>
+    <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+      Esperado: entrada {money(totals.opening)} + ventas {money(totals.sales)} + ingresos {money(totals.income)} - retiros/egresos {money(totals.withdrawals + totals.expenses)} = <b className="text-foreground">{money(totals.expected)}</b>
     </div>
+  );
+}
+
+function ClosureMoneyPanel({ closure, summary }: { closure: AnyRow; summary: AnyRow | undefined }) {
+  const totals = totalBreakdown(summary);
+  const expected = Number(closure.totalExpected ?? 0);
+  const counted = Number(closure.totalCounted ?? 0);
+  const countedPercent = expected > 0 ? Math.min(100, Math.max(0, (counted / expected) * 100)) : 0;
+  const missingPercent = expected > 0 ? 100 - countedPercent : 0;
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-4">
+      <div className="rounded-md bg-card p-4">
+        <div className="grid items-center gap-4 sm:grid-cols-[1fr_auto_1fr]">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Debía haber</p>
+            <p className="text-2xl font-bold">{money(expected)}</p>
+          </div>
+          <span className="hidden text-2xl text-muted-foreground sm:block">→</span>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Se contó</p>
+            <p className="text-2xl font-bold">{money(counted)}</p>
+          </div>
+        </div>
+        <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-border">
+          <div className="h-full bg-emerald-600" style={{ width: `${countedPercent}%` }} />
+          {missingPercent > 0 ? <div className="h-full bg-red-500" style={{ width: `${missingPercent}%` }} /> : null}
+        </div>
+      </div>
+
+      <p className="mt-4 text-sm font-semibold">Cómo se llegó a {money(expected)}</p>
+      <div className="mt-2 overflow-hidden rounded-md border border-border bg-card text-sm">
+        <MoneyRow label="Efectivo inicial" value={totals.opening} />
+        <MoneyRow label={`Ventas cobradas (${summary?.salesCount ?? 0})`} value={totals.sales} icon="plus" />
+        <MoneyRow label="Ingresos extra" value={totals.income} icon="plus" />
+        <MoneyRow label="Retiros y egresos" value={-(totals.withdrawals + totals.expenses)} icon="minus" />
+        <div className="flex items-center justify-between bg-foreground px-3 py-3 font-semibold text-background">
+          <span>Total esperado</span>
+          <span>{money(expected)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MoneyRow({ label, value, icon }: { label: string; value: number; icon?: 'plus' | 'minus' }) {
+  return (
+    <div className="flex items-center justify-between border-b border-border px-3 py-2.5 last:border-b-0">
+      <span className="inline-flex items-center gap-2 text-muted-foreground">
+        {icon === 'plus' ? <Plus className="h-4 w-4" /> : icon === 'minus' ? <Minus className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />}
+        {label}
+      </span>
+      <span className="font-semibold">{value < 0 ? `-${money(Math.abs(value))}` : money(value)}</span>
+    </div>
+  );
+}
+
+function methodBreakdown(summary: AnyRow | undefined, method: string, expected: number): MethodBreakdown {
+  const value = ((summary?.breakdownByMethod as AnyRow | undefined)?.[method] ?? {}) as Partial<MethodBreakdown>;
+  return {
+    opening: Number(value.opening ?? 0),
+    sales: Number(value.sales ?? 0),
+    income: Number(value.income ?? 0),
+    withdrawals: Number(value.withdrawals ?? 0),
+    expenses: Number(value.expenses ?? 0),
+    expected: Number(value.expected ?? expected),
+  };
+}
+
+function totalBreakdown(summary: AnyRow | undefined): MethodBreakdown {
+  return methods.reduce(
+    (total, method) => {
+      const item = methodBreakdown(summary, method.value, Number((summary?.expectedByMethod as AnyRow | undefined)?.[method.value] ?? 0));
+      return {
+        opening: total.opening + item.opening,
+        sales: total.sales + item.sales,
+        income: total.income + item.income,
+        withdrawals: total.withdrawals + item.withdrawals,
+        expenses: total.expenses + item.expenses,
+        expected: total.expected + item.expected,
+      };
+    },
+    { opening: 0, sales: 0, income: 0, withdrawals: 0, expenses: 0, expected: 0 },
   );
 }
 
@@ -550,6 +641,15 @@ function shiftLabel(openedAt: unknown) {
   const date = new Date(String(openedAt ?? ''));
   const hour = Number.isFinite(date.getTime()) ? date.getHours() : 0;
   return hour >= 15 || hour < 6 ? 'Turno noche' : 'Turno día';
+}
+
+function closurePeriod(summary: AnyRow | undefined, closure: AnyRow) {
+  return `${shortDateTime(summary?.openedAt)} - ${shortDateTime(closure.createdAt)}`;
+}
+
+function shortDateTime(value: unknown) {
+  const text = dateTime(value);
+  return text === '-' ? '-' : text;
 }
 
 function dateInputValue(date: Date) {

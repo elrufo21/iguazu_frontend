@@ -4,9 +4,11 @@ import {
   ArrowUpCircle,
   Banknote,
   CalendarClock,
+  Pencil,
   Moon,
   Plus,
   ReceiptText,
+  RotateCcw,
   Search,
   Sun,
   User,
@@ -14,6 +16,7 @@ import {
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
+import { z } from 'zod';
 import { ResourceFormDialog } from '../../components/forms/resource-form-dialog';
 import { StatusBadge } from '../../components/status-badge/status-badge';
 import { Badge } from '../../components/ui/badge';
@@ -24,6 +27,7 @@ import { Select } from '../../components/ui/select';
 import { resourceApi } from '../../lib/api';
 import { errorMessage } from '../../lib/api-error';
 import { dateTime, getValue, money, productTitle, valueLabel } from '../../lib/utils';
+import { useAuthStore } from '../../store/auth.store';
 import type { AnyRow } from '../../types';
 import { modules } from '../module-config';
 import { normalizeRows, saveResource } from '../shared/resource-save';
@@ -43,23 +47,39 @@ const cashIncomeConfig = {
           label: 'Tipo de ingreso',
           options: [{ label: 'Ingreso de dinero', value: 'CASH_ADJUSTMENT' }],
         }
-      : field.name === 'cashShiftId'
+        : field.name === 'cashShiftId'
         ? {
             ...field,
-            label: 'Caja abierta',
-            endpoint: 'cash-shift/open/all',
-            helper: 'Como ADMIN selecciona la caja abierta que recibirá el ingreso.',
+            label: 'Caja',
+            endpoint: 'cash-shift/history',
+            helper: 'Como ADMIN puedes registrar ingresos en cajas abiertas o cerradas.',
           }
         : field,
   ),
 };
+const correctionSchema = z.object({
+  reason: z.string().min(1, 'Requerido'),
+}).passthrough();
+const openingCorrectionSchema = z.object({
+  openingAmount: z.coerce.number({ error: 'Número inválido' }).min(0, 'Debe ser mayor o igual a cero'),
+  reason: z.string().min(1, 'Requerido'),
+}).passthrough();
+const reverseFields = [{ name: 'reason', label: 'Motivo', type: 'textarea' as const }];
+const openingCorrectionFields = [
+  { name: 'openingAmount', label: 'Monto inicial correcto', type: 'number' as const, step: '0.01' },
+  { name: 'reason', label: 'Motivo', type: 'textarea' as const },
+];
 
 export function CashMovementsPage() {
   const [open, setOpen] = useState(false);
   const [movementForm, setMovementForm] = useState<'income' | 'expense'>('expense');
+  const [reverseMovement, setReverseMovement] = useState<AnyRow | null>(null);
+  const [openingDialog, setOpeningDialog] = useState(false);
   const [cashShiftId, setCashShiftId] = useState('');
   const [openedDate, setOpenedDate] = useState('');
   const [search, setSearch] = useState('');
+  const [showCorrections, setShowCorrections] = useState(false);
+  const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const formConfig = movementForm === 'income' ? cashIncomeConfig : cashMovementConfig;
 
@@ -76,6 +96,26 @@ export function CashMovementsPage() {
 
   const movements = useMemo(() => normalizeRows(movementsQuery.data), [movementsQuery.data]);
   const cashShifts = useMemo(() => normalizeRows(cashShiftsQuery.data), [cashShiftsQuery.data]);
+  const selectedShift = useMemo(
+    () => cashShifts.find((shift) => String(shift.id) === cashShiftId),
+    [cashShifts, cashShiftId],
+  );
+  const reversedMovementIds = useMemo(
+    () =>
+      new Set(
+        movements
+          .filter((movement) => movement.referenceType === 'MANUAL_REVERSAL')
+          .map((movement) => String(movement.referenceId)),
+      ),
+    [movements],
+  );
+  const correctionCount = useMemo(
+    () =>
+      movements.filter((movement) =>
+        isCorrectionMovement(movement, reversedMovementIds),
+      ).length,
+    [movements, reversedMovementIds],
+  );
   const visibleCashShifts = useMemo(
     () =>
       cashShifts.filter(
@@ -87,6 +127,9 @@ export function CashMovementsPage() {
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return movements.filter((movement) => {
+      if (!showCorrections && isCorrectionMovement(movement, reversedMovementIds)) {
+        return false;
+      }
       const sale = movementSale(movement);
       const detailText = saleDetails(sale).map((detail) => String(detail.description ?? '')).join(' ');
       const haystack = [
@@ -105,7 +148,7 @@ export function CashMovementsPage() {
         (!term || haystack.includes(term))
       );
     });
-  }, [movements, search]);
+  }, [movements, reversedMovementIds, search, showCorrections]);
 
   const totals = useMemo(() => {
     const income = filtered
@@ -122,6 +165,32 @@ export function CashMovementsPage() {
     onSuccess: () => {
       toast.success(movementForm === 'income' ? 'Ingreso registrado' : 'Salida registrada');
       setOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ['cash-movements'] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+  const reverse = useMutation({
+    mutationFn: (values: Record<string, unknown>) =>
+      resourceApi.post(`cash-movements/${String(reverseMovement?.id)}/reverse`, {
+        reason: values.reason,
+      }),
+    onSuccess: () => {
+      toast.success('Movimiento reversado');
+      setReverseMovement(null);
+      void queryClient.invalidateQueries({ queryKey: ['cash-movements'] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+  const correctOpening = useMutation({
+    mutationFn: (values: Record<string, unknown>) =>
+      resourceApi.update(`cash-shift/${cashShiftId}/opening-amount`, {
+        openingAmount: values.openingAmount,
+        reason: values.reason,
+      }),
+    onSuccess: () => {
+      toast.success('Monto inicial corregido');
+      setOpeningDialog(false);
+      void queryClient.invalidateQueries({ queryKey: ['cash-shifts'] });
       void queryClient.invalidateQueries({ queryKey: ['cash-movements'] });
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -157,15 +226,16 @@ export function CashMovementsPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <Summary label="Ingresos" value={totals.income} icon={<ArrowUpCircle className="h-5 w-5 text-emerald-600" />} />
-        <Summary label="Egresos" value={totals.expense} icon={<ArrowDownCircle className="h-5 w-5 text-red-600" />} />
+      <div className="grid gap-3 md:grid-cols-5">
+        <Summary label="Entrada" value={Number(selectedShift?.openingAmount ?? 0)} icon={<Banknote className="h-5 w-5 text-primary" />} />
+        <Summary label={showCorrections ? 'Ingresos' : 'Ingresos reales'} value={totals.income} icon={<ArrowUpCircle className="h-5 w-5 text-emerald-600" />} />
+        <Summary label={showCorrections ? 'Egresos' : 'Egresos reales'} value={totals.expense} icon={<ArrowDownCircle className="h-5 w-5 text-red-600" />} />
         <Summary label="Neto" value={totals.net} icon={<Banknote className="h-5 w-5 text-primary" />} />
         <Summary label="Movimientos" text={String(filtered.length)} icon={<ReceiptText className="h-5 w-5 text-sky-600" />} />
       </div>
 
       <Card>
-        <CardContent className="grid gap-3 md:grid-cols-[1fr_160px_420px]">
+        <CardContent className="grid gap-3 md:grid-cols-[1fr_160px_minmax(280px,420px)_auto_auto]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input className="pl-9" placeholder="Buscar producto, cliente, usuario..." value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -186,6 +256,21 @@ export function CashMovementsPage() {
               </option>
             ))}
           </Select>
+          {correctionCount > 0 ? (
+            <Button
+              variant={showCorrections ? 'secondary' : 'outline'}
+              onClick={() => setShowCorrections((value) => !value)}
+            >
+              <RotateCcw className="h-4 w-4" />
+              {showCorrections ? 'Ocultar anulados' : `Ver anulados (${correctionCount})`}
+            </Button>
+          ) : null}
+          {user?.role === 'ADMIN' && selectedShift ? (
+            <Button variant="outline" onClick={() => setOpeningDialog(true)}>
+              <Pencil className="h-4 w-4" />
+              Corregir entrada
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -203,12 +288,21 @@ export function CashMovementsPage() {
         </Card>
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-          No hay movimientos con esos filtros.
+          {correctionCount > 0 && !showCorrections ? 'No hay movimientos reales con esos filtros.' : 'No hay movimientos con esos filtros.'}
         </div>
       ) : (
         <div className="space-y-3">
           {filtered.map((movement) => (
-            <MovementCard key={String(movement.id)} movement={movement} />
+            <MovementCard
+              key={String(movement.id)}
+              movement={movement}
+              reversed={reversedMovementIds.has(String(movement.id))}
+              onReverse={
+                user?.role === 'ADMIN' && movement.referenceType === 'MANUAL' && !reversedMovementIds.has(String(movement.id))
+                  ? () => setReverseMovement(movement)
+                  : undefined
+              }
+            />
           ))}
         </div>
       )}
@@ -220,8 +314,33 @@ export function CashMovementsPage() {
         fields={formConfig.fields}
         schema={formConfig.schema}
         saving={save.isPending}
+        initialValue={cashShiftId ? { cashShiftId } : null}
         onOpenChange={setOpen}
         onSubmit={(values) => save.mutate(values)}
+      />
+      <ResourceFormDialog
+        open={Boolean(reverseMovement)}
+        title="Reversar movimiento"
+        description="Se creará el movimiento opuesto en la misma caja."
+        fields={reverseFields}
+        schema={correctionSchema}
+        saving={reverse.isPending}
+        onOpenChange={(value) => !value && setReverseMovement(null)}
+        onSubmit={(values) => reverse.mutate(values)}
+      />
+      <ResourceFormDialog
+        open={openingDialog}
+        title="Corregir entrada de caja"
+        description="Actualiza el monto inicial del turno con auditoría."
+        fields={openingCorrectionFields}
+        schema={openingCorrectionSchema}
+        initialValue={{
+          openingAmount: selectedShift?.openingAmount ?? '',
+          reason: '',
+        }}
+        saving={correctOpening.isPending}
+        onOpenChange={setOpeningDialog}
+        onSubmit={(values) => correctOpening.mutate(values)}
       />
     </section>
   );
@@ -241,7 +360,7 @@ function Summary({ label, value, text, icon }: { label: string; value?: number; 
   );
 }
 
-function MovementCard({ movement }: { movement: AnyRow }) {
+function MovementCard({ movement, reversed, onReverse }: { movement: AnyRow; reversed?: boolean; onReverse?: () => void }) {
   const sale = movementSale(movement);
   const details = saleDetails(sale);
   const shift = cashShiftWorkShift(movement);
@@ -285,6 +404,18 @@ function MovementCard({ movement }: { movement: AnyRow }) {
             {isIncome ? '+' : '-'}{money(movement.amount)}
           </p>
         </div>
+        {(reversed || onReverse) && (
+          <div className="flex justify-end border-t border-border pt-3">
+            {reversed ? (
+              <Badge tone="slate">Reversado</Badge>
+            ) : (
+              <Button variant="outline" size="sm" onClick={onReverse}>
+                <RotateCcw className="h-4 w-4" />
+                Reversar
+              </Button>
+            )}
+          </div>
+        )}
 
         {sale && (
           <div className="border-t border-border pt-3">
@@ -363,4 +494,8 @@ function relatedEmployee(movement: AnyRow) {
     getValue(movement, 'staffAdvance.employee.fullName') ??
     getValue(movement, 'staffDiscount.employee.fullName')
   );
+}
+
+function isCorrectionMovement(movement: AnyRow, reversedMovementIds: Set<string>) {
+  return movement.referenceType === 'MANUAL_REVERSAL' || reversedMovementIds.has(String(movement.id));
 }
