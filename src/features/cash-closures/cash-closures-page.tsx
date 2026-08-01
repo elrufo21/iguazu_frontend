@@ -606,7 +606,7 @@ function ClosureMoneyPanel({ closure, summary, details }: { closure: AnyRow; sum
         <MoneyRow label="Ingresos extra en efectivo" value={cash.income} icon="plus" />
         <MoneyRow label="Retiros y egresos en efectivo" value={-(cash.withdrawals + cash.expenses)} icon="minus" />
         <div className="flex items-center justify-between bg-foreground px-3 py-3 font-semibold text-background">
-          <span>Sencillo esperado</span>
+          <span>Total</span>
           <span>{money(expected)}</span>
         </div>
       </div>

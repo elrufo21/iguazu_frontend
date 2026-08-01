@@ -893,7 +893,7 @@ export function SalesPage() {
                 </span>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4 pt-5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden">
+            <CardContent className="space-y-4 pt-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
               {renderCart()}
             </CardContent>
           </Card>

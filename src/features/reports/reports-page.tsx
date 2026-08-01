@@ -203,8 +203,8 @@ function CashSummaryReport({ data }: { data: AnyRow }) {
         <KpiCard label="Turnos" value={data.shifts} tone="blue" />
         <KpiCard label="Ventas" value={data.salesCount} tone="blue" />
         <KpiCard label="Monto inicial" value={money(data.openingAmount)} tone="slate" />
-        <KpiCard label="Ingresos" value={money(data.incomeTotal)} tone="green" />
-        <KpiCard label="Egresos" value={money(data.expenseTotal)} tone="amber" />
+        <KpiCard label="Ingresos reales" value={money(data.incomeTotal)} tone="green" />
+        <KpiCard label="Egresos reales" value={money(data.expenseTotal)} tone="amber" />
         <KpiCard label="Esperado cerrado" value={money(data.expectedTotal)} tone="slate" />
         <KpiCard label="Diferencia" value={money(difference)} tone={diffTone} />
         <KpiCard
@@ -243,7 +243,7 @@ function CashSummaryReport({ data }: { data: AnyRow }) {
         }}
       />
 
-      <SectionTitle>Movimientos de caja</SectionTitle>
+      <SectionTitle>Movimientos reales de caja</SectionTitle>
       <SimpleTable
         rows={normalizeRows(data.movements)}
         columns={['cashShiftId', 'type', 'category', 'paymentMethod', 'amount', 'user', 'customer', 'room', 'details', 'occurredAt']}
@@ -623,8 +623,8 @@ function CashMonthlyReport({ data }: { data: AnyRow }) {
       accessor: 'firstOpening',
       render: (v) => money(Number(v ?? 0)),
     },
-    { header: 'Ingresos', accessor: 'incomeTotal', render: (v) => money(Number(v ?? 0)) },
-    { header: 'Egresos', accessor: 'expenseTotal', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Ingresos reales', accessor: 'incomeTotal', render: (v) => money(Number(v ?? 0)) },
+    { header: 'Egresos reales', accessor: 'expenseTotal', render: (v) => money(Number(v ?? 0)) },
     {
       header: 'Ganancia neta',
       accessor: 'netFlow',
@@ -645,8 +645,8 @@ function CashMonthlyReport({ data }: { data: AnyRow }) {
       <KpiGrid>
         <KpiCard label="Inicio de caja" value={money(totals.firstOpening)} tone="blue" />
         <KpiCard label="Ganancia neta" value={money(totals.netFlow)} tone="green" />
-        <KpiCard label="Ingresos" value={money(totals.incomeTotal)} tone="slate" />
-        <KpiCard label="Egresos" value={money(totals.expenseTotal)} tone="red" />
+        <KpiCard label="Ingresos reales" value={money(totals.incomeTotal)} tone="slate" />
+        <KpiCard label="Egresos reales" value={money(totals.expenseTotal)} tone="red" />
         <KpiCard label="Acumulado final" value={money(totals.finalBalance)} tone="amber" />
       </KpiGrid>
 
@@ -1253,8 +1253,8 @@ function summaryRows(report: ReportKey, data: AnyRow): Record<string, unknown>[]
         ['Turnos', data.shifts],
         ['Ventas', data.salesCount],
         ['Monto inicial', data.openingAmount],
-        ['Ingresos', data.incomeTotal],
-        ['Egresos', data.expenseTotal],
+        ['Ingresos reales', data.incomeTotal],
+        ['Egresos reales', data.expenseTotal],
         ['Esperado', data.expectedTotal],
         ['Diferencia', data.differenceTotal],
       ]);
@@ -1263,8 +1263,8 @@ function summaryRows(report: ReportKey, data: AnyRow): Record<string, unknown>[]
       return metricRows([
         ['Inicio de caja', totals.firstOpening],
         ['Ganancia neta', totals.netFlow],
-        ['Ingresos', totals.incomeTotal],
-        ['Egresos', totals.expenseTotal],
+        ['Ingresos reales', totals.incomeTotal],
+        ['Egresos reales', totals.expenseTotal],
         ['Acumulado final', totals.finalBalance],
       ]);
     }

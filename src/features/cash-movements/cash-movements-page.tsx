@@ -151,14 +151,26 @@ export function CashMovementsPage() {
   }, [movements, reversedMovementIds, search, showCorrections]);
 
   const totals = useMemo(() => {
+    const opening = Number(selectedShift?.openingAmount ?? 0);
     const income = filtered
       .filter((movement) => movement.type === 'INCOME')
       .reduce((sum, movement) => sum + Number(movement.amount ?? 0), 0);
     const expense = filtered
       .filter((movement) => movement.type === 'EXPENSE')
       .reduce((sum, movement) => sum + Number(movement.amount ?? 0), 0);
-    return { income, expense, net: income - expense };
-  }, [filtered]);
+    const cashIncome = filtered
+      .filter((movement) => movement.type === 'INCOME' && movement.paymentMethod === 'CASH')
+      .reduce((sum, movement) => sum + Number(movement.amount ?? 0), 0);
+    const cashExpense = filtered
+      .filter((movement) => movement.type === 'EXPENSE' && movement.paymentMethod === 'CASH')
+      .reduce((sum, movement) => sum + Number(movement.amount ?? 0), 0);
+    return {
+      income,
+      expense,
+      cashBalance: opening + cashIncome - cashExpense,
+      expectedTotal: opening + income - expense,
+    };
+  }, [filtered, selectedShift?.openingAmount]);
 
   const save = useMutation({
     mutationFn: (values: Record<string, unknown>) => saveResource(formConfig, values),
@@ -230,8 +242,8 @@ export function CashMovementsPage() {
         <Summary label="Entrada" value={Number(selectedShift?.openingAmount ?? 0)} icon={<Banknote className="h-5 w-5 text-primary" />} />
         <Summary label={showCorrections ? 'Ingresos' : 'Ingresos reales'} value={totals.income} icon={<ArrowUpCircle className="h-5 w-5 text-emerald-600" />} />
         <Summary label={showCorrections ? 'Egresos' : 'Egresos reales'} value={totals.expense} icon={<ArrowDownCircle className="h-5 w-5 text-red-600" />} />
-        <Summary label="Neto" value={totals.net} icon={<Banknote className="h-5 w-5 text-primary" />} />
-        <Summary label="Movimientos" text={String(filtered.length)} icon={<ReceiptText className="h-5 w-5 text-sky-600" />} />
+        <Summary label="Sencillo esperado" value={totals.cashBalance} icon={<Banknote className="h-5 w-5 text-primary" />} />
+        <Summary label="Esperado general" value={totals.expectedTotal} icon={<ReceiptText className="h-5 w-5 text-sky-600" />} />
       </div>
 
       <Card>
