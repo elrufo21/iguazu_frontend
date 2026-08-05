@@ -10,6 +10,7 @@ import {
   Search,
   ShoppingCart,
   Trash2,
+  XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -51,6 +52,7 @@ type ChargeItem = {
 export function StaysPage() {
   const [open, setOpen] = useState(false);
   const [checkoutId, setCheckoutId] = useState<number | null>(null);
+  const [cancelStayId, setCancelStayId] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<string>("CASH");
   const [cashShiftId, setCashShiftId] = useState("");
   const [chargeStay, setChargeStay] = useState<AnyRow | null>(null);
@@ -143,6 +145,7 @@ export function StaysPage() {
   ).length;
   const cleaningRooms = rooms.filter((room) => room.status === "RESERVED");
   const canMarkClean = hasPermission(user, "PATCH /rooms/:id/clean");
+  const canCancelStay = hasPermission(user, "PATCH /stays/:id/cancel");
 
   const checkIn = useMutation({
     mutationFn: (values: Record<string, unknown>) =>
@@ -163,6 +166,19 @@ export function StaysPage() {
       setCheckoutId(null);
       setPaymentMethod("CASH");
       setCashShiftId("");
+      void queryClient.invalidateQueries();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const cancelStay = useMutation({
+    mutationFn: (id: number) =>
+      resourceApi.update(`stays/${id}/cancel`, {
+        reason: "Check-in anulado desde estadías",
+      }),
+    onSuccess: () => {
+      toast.success("Estadía anulada. Habitación disponible.");
+      setCancelStayId(null);
       void queryClient.invalidateQueries();
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -396,6 +412,22 @@ export function StaysPage() {
                     <LogOut className="h-4 w-4" />
                     {pendingTotal > 0 ? "Cobrar antes" : "Check-out"}
                   </Button>
+                  {canCancelStay && (
+                    <Button
+                      className="h-11 sm:col-span-2"
+                      variant="outline"
+                      disabled={staySales.length > 0 || cancelStay.isPending}
+                      onClick={() => setCancelStayId(Number(stay.id))}
+                      title={
+                        staySales.length > 0
+                          ? "Anula primero las ventas o cargos asociados"
+                          : "Anular check-in y liberar habitación"
+                      }
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Anular estadía
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -470,6 +502,14 @@ export function StaysPage() {
         saving={checkIn.isPending}
         onOpenChange={setOpen}
         onSubmit={(values) => checkIn.mutate(values)}
+      />
+
+      <ConfirmDialog
+        open={cancelStayId !== null}
+        title="Anular estadía"
+        description="Se quitará de estadías activas y la habitación quedará disponible. Úsalo solo si el check-in fue un error."
+        onOpenChange={(value) => !value && setCancelStayId(null)}
+        onConfirm={() => cancelStayId && cancelStay.mutate(cancelStayId)}
       />
 
       <ConfirmDialog

@@ -92,6 +92,7 @@ const PERM_META: Record<string, PermMeta> = {
 
   // Estadías
   'POST /stays/check-in': { label: 'Hacer check-in', group: 'Estadías', icon: Hotel },
+  'PATCH /stays/:id/cancel': { label: 'Anular estadía', group: 'Estadías', icon: Hotel },
   'PATCH /stays/:id/check-out': { label: 'Hacer check-out (con cobro)', group: 'Estadías', icon: Hotel },
   'GET /stays/active': { label: 'Ver estadías activas', group: 'Estadías', icon: Hotel },
   'GET /stays/history': { label: 'Ver historial de estadías', group: 'Estadías', icon: Hotel },

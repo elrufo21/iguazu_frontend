@@ -762,6 +762,11 @@ export const modules: Record<string, ResourceConfig> = {
     ],
     actions: [
       {
+        label: "Anular",
+        path: (row) => `stays/${row.id}/cancel`,
+        confirm: "La estadía quedará anulada y la habitación disponible.",
+      },
+      {
         label: "Check-out",
         path: (row) => `stays/${row.id}/check-out`,
         confirm: "Se cerrará la estadía.",
