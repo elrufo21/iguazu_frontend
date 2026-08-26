@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Clock, HandCoins, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { CashShiftSelect } from '../../components/cash-shift-select';
 import { StatusBadge } from '../../components/status-badge/status-badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
@@ -34,7 +33,6 @@ export function StaffAdvancesPage() {
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [reason, setReason] = useState('');
   const [review, setReview] = useState<{ advance: AnyRow; action: 'approve' | 'reject' } | null>(null);
-  const [cashShiftId, setCashShiftId] = useState('');
   const [reviewNote, setReviewNote] = useState('');
 
   const advancesQuery = useQuery({
@@ -64,7 +62,6 @@ export function StaffAdvancesPage() {
     mutationFn: () => {
       if (!review) throw new Error('Sin solicitud');
       return resourceApi.post(`staff-advances/${review.advance.id}/${review.action}`, {
-        ...(review.action === 'approve' && cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
         paymentMethod,
         note: reviewNote,
       });
@@ -72,10 +69,8 @@ export function StaffAdvancesPage() {
     onSuccess: () => {
       toast.success(review?.action === 'approve' ? 'Adelanto aprobado' : 'Solicitud rechazada');
       setReview(null);
-      setCashShiftId('');
       setReviewNote('');
       void queryClient.invalidateQueries({ queryKey: ['staff-advances'] });
-      void queryClient.invalidateQueries({ queryKey: ['cash-movements'] });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
@@ -155,12 +150,14 @@ export function StaffAdvancesPage() {
           </DialogDescription>
           {review?.action === 'approve' && (
             <div className="mt-4 space-y-3">
-              <CashShiftSelect value={cashShiftId} onChange={setCashShiftId} />
-              <Select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
-                {paymentOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
+              <div className="space-y-2">
+                <Label>Método de entrega (Informativo)</Label>
+                <Select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+                  {paymentOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </Select>
+              </div>
             </div>
           )}
           <div className="mt-4 space-y-2">
@@ -171,7 +168,7 @@ export function StaffAdvancesPage() {
             <Button variant="outline" onClick={() => setReview(null)}>Cancelar</Button>
             <Button
               variant={review?.action === 'reject' ? 'destructive' : 'default'}
-              disabled={reviewRequest.isPending || (review?.action === 'approve' && !cashShiftId)}
+              disabled={reviewRequest.isPending}
               onClick={() => reviewRequest.mutate()}
             >
               {review?.action === 'approve' ? 'Aprobar' : 'Rechazar'}
