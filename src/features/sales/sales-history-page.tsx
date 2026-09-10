@@ -20,6 +20,7 @@ import {
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
+import { PaymentSplitInput, type PaymentEntry } from '../../components/payment-split-input';
 import { StatusBadge } from '../../components/status-badge/status-badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
@@ -148,60 +149,76 @@ function SaleCard({
     <div className={`rounded-xl border bg-card shadow-sm transition-all overflow-hidden ${
       status === 'OPEN'
         ? 'border-amber-300 shadow-amber-100'
-        : status === 'PAID'
-        ? 'border-border'
-        : 'border-border opacity-60'
+        : status === 'CANCELLED'
+          ? 'border-border/40 opacity-60'
+          : 'border-border'
     }`}>
-      {/* Encabezado de la tarjeta */}
-      <div className="p-4">
+      <div className="p-4 space-y-3">
+        {/* Cabecera: ID, fecha, estado y tipos */}
         <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm font-bold text-foreground">
+              #{String(sale.id)}
+            </span>
+            <StatusBadge value={status} />
+            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              <Receipt className="h-3 w-3" />
+              {invoiceLabel}
+            </span>
+            {isUnified && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-purple-50 border border-purple-200 px-2 py-0.5 text-xs font-semibold text-purple-700">
+                <ShoppingBag className="h-3 w-3" />
+                Venta unificada
+              </span>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {dateTime(sale.createdAt)}
+          </span>
+        </div>
+
+        {/* Cliente, habitación y responsable */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <div className="flex items-center gap-1.5 font-medium text-foreground">
+            <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span>{customerName}</span>
+          </div>
+          {roomNumber && (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <BedDouble className="h-3.5 w-3.5 shrink-0" />
+              <span>Hab. {roomNumber}</span>
+            </div>
+          )}
+          <span className="text-xs text-muted-foreground">
+            Por {String(getValue(sale, 'user.employee.fullName') ?? getValue(sale, 'user.username') ?? 'Personal')}
+          </span>
+        </div>
+
+        {/* Resumen de ítems + Total */}
+        <div className="flex items-center justify-between gap-4 pt-1">
           <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2 mb-1">
-              <span className="font-bold text-primary text-sm">
-                {invoiceLabel} #{String(sale.invoiceNumber ?? sale.id)}
-              </span>
-              <StatusBadge value={status} />
-              {isUnified && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
-                  <ShoppingBag className="h-3 w-3" />
-                  Venta completa
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <User className="h-3.5 w-3.5" />
-                {customerName}
-              </span>
-              {roomNumber && (
-                <span className="flex items-center gap-1">
-                  <BedDouble className="h-3.5 w-3.5" />
-                  Hab. {roomNumber}
-                </span>
-              )}
-              <span className="flex items-center gap-1">
-                <Receipt className="h-3.5 w-3.5" />
-                {dateTime(sale.createdAt)}
-              </span>
-            </div>
-            {/* Iconos de qué incluye */}
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {details.map((d) => {
+            <div className="flex flex-wrap gap-1.5">
+              {details.slice(0, 3).map((d) => {
                 const type = String(d.itemType);
                 const meta = ITEM_TYPE_LABELS[type];
-                if (!meta) return null;
                 return (
                   <span
                     key={String(d.id)}
-                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${meta.color}`}
+                    className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground truncate max-w-[200px]"
                   >
-                    {meta.icon}
-                    {String(d.description).length > 24
+                    {meta?.icon}
+                    {Number(d.quantity) > 1 ? `${String(d.quantity)}× ` : ''}
+                    {String(d.description).length > 22
                       ? String(d.description).slice(0, 22) + '…'
                       : String(d.description)}
                   </span>
                 );
               })}
+              {details.length > 3 && (
+                <span className="text-xs text-muted-foreground self-center">
+                  +{details.length - 3} más
+                </span>
+              )}
             </div>
           </div>
 
@@ -368,6 +385,8 @@ export function SalesHistoryPage() {
   const [editCashShiftId, setEditCashShiftId] = useState('');
   const [editCustomerId, setEditCustomerId] = useState('');
   const [editStayId, setEditStayId] = useState('');
+  const [paySaleTarget, setPaySaleTarget] = useState<AnyRow | null>(null);
+  const [payPayments, setPayPayments] = useState<PaymentEntry[]>([{ paymentMethod: 'CASH', amount: 0 }]);
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN';
@@ -402,12 +421,13 @@ export function SalesHistoryPage() {
   });
 
   const paySale = useMutation({
-    mutationFn: (sale: AnyRow) =>
+    mutationFn: ({ sale, payments }: { sale: AnyRow; payments: PaymentEntry[] }) =>
       resourceApi.post(`sales/${sale.id}/pay`, {
-        payments: [{ paymentMethod: 'CASH', amount: Number(sale.total ?? 0) }],
+        payments,
       }),
     onSuccess: () => {
-      toast.success('Venta cobrada');
+      toast.success('Venta cobrada exitosamente');
+      setPaySaleTarget(null);
       void queryClient.invalidateQueries();
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -611,7 +631,10 @@ export function SalesHistoryPage() {
             <SaleCard
               key={String(sale.id)}
               sale={sale}
-              onPay={(s) => paySale.mutate(s)}
+              onPay={(s) => {
+                setPaySaleTarget(s);
+                setPayPayments([{ paymentMethod: 'CASH', amount: Number(s.total ?? 0) }]);
+              }}
               onInvoice={(s) => {
                 setInvoiceSale(s);
                 setInvoiceType('auto');
@@ -742,6 +765,61 @@ export function SalesHistoryPage() {
         }}
         pending={edit.isPending}
       />
+
+      <Dialog
+        open={paySaleTarget !== null}
+        onOpenChange={(open) => !open && setPaySaleTarget(null)}
+      >
+        <DialogContent className="w-[min(520px,calc(100vw-2rem))] p-5">
+          <DialogTitle className="text-lg font-semibold">
+            Cobrar venta / cargo #{String(paySaleTarget?.id ?? '')}
+          </DialogTitle>
+          <DialogDescription className="mt-1 text-sm text-muted-foreground">
+            {paySaleTarget?.customer
+              ? String(getValue(paySaleTarget, 'customer.fullName'))
+              : 'Consumidor final'}{' '}
+            — Total: {money(paySaleTarget?.total ?? 0)}
+          </DialogDescription>
+
+          <div className="mt-4 space-y-4">
+            <PaymentSplitInput
+              totalAmount={Number(paySaleTarget?.total ?? 0)}
+              payments={payPayments}
+              onChange={setPayPayments}
+              disabled={paySale.isPending}
+            />
+          </div>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPaySaleTarget(null)}
+              disabled={paySale.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={
+                paySale.isPending ||
+                Math.abs(
+                  payPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) -
+                    Number(paySaleTarget?.total ?? 0),
+                ) > 0.01 ||
+                !payPayments.every((p) => p.amount > 0)
+              }
+              onClick={() =>
+                paySaleTarget &&
+                paySale.mutate({
+                  sale: paySaleTarget,
+                  payments: payPayments.filter((p) => p.amount > 0),
+                })
+              }
+            >
+              {paySale.isPending ? 'Procesando...' : `Confirmar cobro (${money(paySaleTarget?.total ?? 0)})`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

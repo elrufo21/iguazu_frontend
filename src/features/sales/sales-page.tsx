@@ -14,6 +14,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
 import { CashShiftSelect } from "../../components/cash-shift-select";
+import { PaymentSplitInput, type PaymentEntry } from "../../components/payment-split-input";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import {
   Dialog,
@@ -46,13 +47,35 @@ type CartItem = {
   unitPrice: number;
 };
 
-const paymentOptions = [
-  { label: "Efectivo", value: "CASH" },
-  { label: "Tarjeta", value: "CARD" },
-  { label: "Yape", value: "YAPE" },
-  { label: "Plin", value: "PLIN" },
-  { label: "Transferencia", value: "TRANSFER" },
-];
+// Distribuir el array de pagos entre una serie de montos objetivos
+function allocatePayments(
+  payments: PaymentEntry[],
+  targets: number[],
+): PaymentEntry[][] {
+  const result: PaymentEntry[][] = targets.map(() => []);
+  let targetIdx = 0;
+  let remainingInTarget = targets[targetIdx] ?? 0;
+
+  for (const p of payments) {
+    let unallocatedPayment = Number(p.amount) || 0;
+    while (unallocatedPayment > 0.001 && targetIdx < targets.length) {
+      const take = Math.min(unallocatedPayment, remainingInTarget);
+      if (take > 0.001) {
+        result[targetIdx].push({
+          paymentMethod: p.paymentMethod,
+          amount: Number(take.toFixed(2)),
+        });
+        unallocatedPayment = Number((unallocatedPayment - take).toFixed(2));
+        remainingInTarget = Number((remainingInTarget - take).toFixed(2));
+      }
+      if (remainingInTarget <= 0.001) {
+        targetIdx++;
+        remainingInTarget = targets[targetIdx] ?? 0;
+      }
+    }
+  }
+  return result;
+}
 
 export function SalesPage() {
   const [searchParams] = useSearchParams();
@@ -67,7 +90,7 @@ export function SalesPage() {
   const [invoiceType, setInvoiceType] = useState("TICKET");
   const [invoiceNumber, setInvoiceNumber] = useState("");
 
-  const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [payments, setPayments] = useState<PaymentEntry[]>([{ paymentMethod: "CASH", amount: 0 }]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [manualType, setManualType] = useState<"OTHER" | "PENALTY">("OTHER");
@@ -192,9 +215,15 @@ export function SalesPage() {
     (sum, s) => sum + Number(s.total ?? 0),
     0,
   );
-  const grandTotal = total + pendingTotal;
+  const grandTotal = Number((total + pendingTotal).toFixed(2));
   const hasSaleItems = cart.length > 0 || pendingSales.length > 0;
   const cartCount = cart.length;
+
+  const paymentsSum = useMemo(
+    () => Number(payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0).toFixed(2)),
+    [payments],
+  );
+  const isPaymentValid = Math.abs(paymentsSum - grandTotal) < 0.01 && payments.every((p) => p.amount > 0);
 
   const createSale = useMutation({
     mutationFn: async ({ chargeToStay }: { chargeToStay: boolean }) => {
@@ -208,17 +237,35 @@ export function SalesPage() {
         }
       }
 
+      if (!chargeToStay && grandTotal > 0 && !isPaymentValid) {
+        throw new Error("El monto de los pagos debe coincidir con el total.");
+      }
+
+      // Preparar asignación de pagos
+      const targetAmounts: number[] = [
+        ...pendingSales.map((s) => Number(s.total ?? 0)),
+        ...(cart.length > 0 ? [Number(total.toFixed(2))] : []),
+      ];
+      const validPayments = payments.filter((p) => p.amount > 0);
+      const allocated = allocatePayments(validPayments, targetAmounts);
+
       // 1. Primero, cobrar los cargos pendientes existentes en BD
-      for (const pendingSale of retroactive ? [] : pendingSales) {
+      for (let i = 0; i < pendingSales.length; i++) {
+        const pendingSale = pendingSales[i];
+        const salePayments = allocated[i]?.length
+          ? allocated[i]
+          : [{ paymentMethod: "CASH", amount: Number(pendingSale.total ?? 0) }];
         await resourceApi.post(`sales/${pendingSale.id}/pay`, {
           ...(cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
-          payments: [{ paymentMethod, amount: Number(pendingSale.total ?? 0) }],
+          payments: salePayments,
         });
       }
 
       // 2. Luego, si hay ítems nuevos en el carrito, crear la nueva venta
       if (cart.length === 0) return null;
       const amount = Number(total.toFixed(2));
+      const cartPayments = allocated[pendingSales.length] ?? [];
+
       return resourceApi.create(retroactive ? "sales/retroactive" : "sales", {
         ...(cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
         ...(retroactive ? { reason: retroactiveReason.trim() } : {}),
@@ -236,7 +283,7 @@ export function SalesPage() {
           // Marcar productos del frigobar como source ROOM
           ...(item.key.startsWith("frigobar-") ? { source: "ROOM" } : {}),
         })),
-        ...(chargeToStay || amount === 0 ? {} : { payments: [{ paymentMethod, amount }] }),
+        ...(chargeToStay || amount === 0 ? {} : { payments: cartPayments }),
       });
     },
     onSuccess: (_data, variables) => {
@@ -254,6 +301,7 @@ export function SalesPage() {
       setCashShiftId("");
       setRetroactive(false);
       setRetroactiveReason("");
+      setPayments([{ paymentMethod: "CASH", amount: 0 }]);
       void queryClient.invalidateQueries();
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -558,24 +606,20 @@ export function SalesPage() {
           )}
         </div>
 
-        <Select
-          label="Método de pago"
-          value={paymentMethod}
-          onChange={(e) => setPaymentMethod(e.target.value)}
-        >
-          {paymentOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
+        <PaymentSplitInput
+          totalAmount={grandTotal}
+          payments={payments}
+          onChange={setPayments}
+          disabled={createSale.isPending}
+        />
 
         <div className="space-y-2 pt-2">
           <Button
-            className="h-12 w-full text-base font-semibold shadow-md"
+            className="h-12 w-full text-base font-semibold shadow-md cursor-pointer"
             disabled={
               (!cart.length && !pendingSales.length) ||
               (retroactive && (!cashShiftId || !retroactiveReason.trim())) ||
+              (grandTotal > 0 && !isPaymentValid) ||
               createSale.isPending
             }
             onClick={() => createSale.mutate({ chargeToStay: false })}

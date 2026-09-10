@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ResourceFormDialog } from "../../components/forms/resource-form-dialog";
 import { CashShiftSelect } from "../../components/cash-shift-select";
+import { PaymentSplitInput, type PaymentEntry } from "../../components/payment-split-input";
 import { StatusBadge } from "../../components/status-badge/status-badge";
 import { ConfirmDialog } from "../../components/ui/alert-dialog";
 import { Badge } from "../../components/ui/badge";
@@ -53,7 +54,7 @@ export function StaysPage() {
   const [open, setOpen] = useState(false);
   const [checkoutId, setCheckoutId] = useState<number | null>(null);
   const [cancelStayId, setCancelStayId] = useState<number | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<string>("CASH");
+  const [payments, setPayments] = useState<PaymentEntry[]>([{ paymentMethod: "CASH", amount: 0 }]);
   const [cashShiftId, setCashShiftId] = useState("");
   const [chargeStay, setChargeStay] = useState<AnyRow | null>(null);
   const [productSearch, setProductSearch] = useState("");
@@ -164,7 +165,7 @@ export function StaysPage() {
     onSuccess: () => {
       toast.success("Check-out realizado. Habitación pendiente de limpieza.");
       setCheckoutId(null);
-      setPaymentMethod("CASH");
+      setPayments([{ paymentMethod: "CASH", amount: 0 }]);
       setCashShiftId("");
       void queryClient.invalidateQueries();
     },
@@ -563,19 +564,12 @@ export function StaysPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Método de pago</Label>
-              <Select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-              >
-                <option value="CASH">Efectivo</option>
-                <option value="YAPE">Yape</option>
-                <option value="PLIN">Plin</option>
-                <option value="CARD">Tarjeta</option>
-                <option value="TRANSFER">Transferencia</option>
-              </Select>
-            </div>
+            <PaymentSplitInput
+              totalAmount={lodgingDue}
+              payments={payments}
+              onChange={setPayments}
+              disabled={checkOut.isPending}
+            />
           </div>
 
           <div className="mt-6 flex justify-end gap-2">
@@ -594,16 +588,17 @@ export function StaysPage() {
                   body: {
                     amount: lodgingDue,
                     ...(cashShiftId ? { cashShiftId: Number(cashShiftId) } : {}),
-                    payments: [
-                      {
-                        paymentMethod,
-                        amount: Number(lodgingDue.toFixed(2)),
-                      },
-                    ],
+                    payments: payments.filter((p) => p.amount > 0),
                   },
                 })
               }
-              disabled={checkOut.isPending}
+              disabled={
+                checkOut.isPending ||
+                Math.abs(
+                  payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) - lodgingDue,
+                ) > 0.01 ||
+                !payments.every((p) => p.amount > 0)
+              }
             >
               {checkOut.isPending ? "Procesando..." : "Cobrar y check-out"}
             </Button>
